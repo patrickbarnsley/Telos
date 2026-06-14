@@ -1,0 +1,15 @@
+# Virtual environment
+venv/
+
+# Environment variables (API keys — never commit)
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Database file
+*.db
+
+# Streamlit cache
+.streamlit/cache
