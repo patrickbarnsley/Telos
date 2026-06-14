@@ -13,3 +13,11 @@ class Job:
     notes: Optional[str] = None
     date_applied: Optional[str] = None
     id: Optional[int] = None
+
+@dataclass
+class Profile:
+    resume_text: str
+    target_role: str
+    goals: Optional[str] = None
+    resume_filename: Optional[str] = None
+    id: Optional[int] = None

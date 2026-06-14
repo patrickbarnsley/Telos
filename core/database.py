@@ -1,6 +1,6 @@
 import sqlite3
 from typing import Optional
-from core.models import Job
+from core.models import Job, Profile
 
 DB_PATH = "telos.db"
 
@@ -24,6 +24,16 @@ def init_db():
             salary_max INTEGER,
             notes TEXT,
             date_applied TEXT,
+            date_updated TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS profile (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            resume_text TEXT NOT NULL,
+            resume_filename TEXT,
+            target_role TEXT NOT NULL,
+            goals TEXT,
             date_updated TEXT
         )
     """)
@@ -61,10 +71,9 @@ def get_job(job_id: int) -> Optional[dict]:
 def update_job(job_id: int, fields: dict):
     conn = get_connection()
     cursor = conn.cursor()
-    fields["date_updated"] = "date('now')"
-    set_clause = ", ".join([f"{k} = ?" for k in fields if k != "date_updated"])
+    set_clause = ", ".join([f"{k} = ?" for k in fields])
     set_clause += ", date_updated = date('now')"
-    values = [v for k, v in fields.items() if k != "date_updated"]
+    values = list(fields.values())
     values.append(job_id)
     cursor.execute(f"UPDATE jobs SET {set_clause} WHERE id = ?", values)
     conn.commit()
@@ -76,3 +85,22 @@ def delete_job(job_id: int):
     cursor.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
     conn.commit()
     conn.close()
+
+def save_profile(profile: Profile):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM profile")
+    cursor.execute("""
+        INSERT INTO profile (resume_text, resume_filename, target_role, goals, date_updated)
+        VALUES (?, ?, ?, ?, date('now'))
+    """, (profile.resume_text, profile.resume_filename, profile.target_role, profile.goals))
+    conn.commit()
+    conn.close()
+
+def get_profile() -> Optional[dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM profile LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
