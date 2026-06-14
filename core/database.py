@@ -1,4 +1,5 @@
 import sqlite3
+import json
 from typing import Optional
 from core.models import Job, Profile
 
@@ -35,6 +36,20 @@ def init_db():
             target_role TEXT NOT NULL,
             goals TEXT,
             date_updated TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS match_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER,
+            scored_at TEXT,
+            overall_score INTEGER,
+            match_summary TEXT,
+            matched_reqs TEXT,
+            missing_reqs TEXT,
+            recommended_actions TEXT,
+            jd_text TEXT,
+            FOREIGN KEY (job_id) REFERENCES jobs(id)
         )
     """)
     conn.commit()
@@ -104,3 +119,23 @@ def get_profile() -> Optional[dict]:
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
+
+def save_match_result(job_id, score, summary, matched, missing, actions, jd_text):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO match_results (job_id, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_actions, jd_text)
+        VALUES (?, date('now'), ?, ?, ?, ?, ?, ?)
+    """, (job_id, score, summary, 
+          json.dumps(matched), json.dumps(missing), 
+          json.dumps(actions), jd_text))
+    conn.commit()
+    conn.close()
+
+def get_match_results(job_id: int) -> list:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM match_results WHERE job_id = ? ORDER BY scored_at DESC", (job_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
