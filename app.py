@@ -8,6 +8,20 @@ st.set_page_config(
 )
 
 apply_theme()
+if "tester_name" not in st.session_state:
+    st.session_state.tester_name = ""
+
+if not st.session_state.tester_name:
+    st.markdown("## Welcome to Telos Beta")
+    st.markdown("Enter your name to get started. This keeps your data separate from other testers.")
+    name_input = st.text_input("Your name", placeholder="e.g. Sarah")
+    if st.button("Start Testing"):
+        if name_input.strip():
+            st.session_state.tester_name = name_input.strip()
+            st.rerun()
+        else:
+            st.error("Please enter your name.")
+    st.stop()
 
 st.markdown("""
 <style>

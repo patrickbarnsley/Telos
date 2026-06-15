@@ -1,7 +1,7 @@
 import streamlit as st
 from core.app_styles import apply_theme
 import json
-from core.database import init_db, get_profile, get_all_match_results
+from core.database import init_db, get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress
 from core.ai_engine import generate_critical_path, chat_with_advisor
 
 init_db()
@@ -10,13 +10,14 @@ apply_theme()
 st.title("🗺️ Guide")
 st.subheader("Your critical path to your target role")
 
-profile = get_profile()
+tester_name = st.session_state.get("tester_name", "default")
+profile = get_profile(tester_name)
 
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")
     st.stop()
 
-match_history = get_all_match_results()
+match_history = get_all_match_results(tester_name)
 
 if "critical_path" not in st.session_state:
     st.session_state.critical_path = None
@@ -58,13 +59,28 @@ if st.session_state.critical_path:
     st.markdown("---")
     st.markdown("### 🛤️ Critical Path Milestones")
 
+    progress = get_milestone_progress(tester_name)
+
     for milestone in cp.get("milestones", []):
-        with st.expander(f"**Milestone {milestone['order']}: {milestone['title']}** — {milestone['timeline']}"):
+        order = milestone['order']
+        is_complete = progress.get(order, False)
+        label = f"~~Milestone {order}: {milestone['title']}~~ ✅" if is_complete else f"Milestone {order}: {milestone['title']} — {milestone['timeline']}"
+
+        with st.expander(label):
+            completed = st.checkbox(
+                "Mark as complete",
+                value=is_complete,
+                key=f"milestone_{order}"
+            )
+            if completed != is_complete:
+                save_milestone_progress(tester_name, order, milestone['title'], completed)
+                st.rerun()
+
             st.markdown(f"**What and Why:** {milestone['description']}")
             st.markdown("**Actions:**")
             for action in milestone.get("actions", []):
                 st.markdown(f"- {action}")
-            st.markdown(f"**✅ Done When:** {milestone['success_criteria']}")
+            st.markdown(f"**Done when:** {milestone['success_criteria']}")
 
     st.markdown("---")
 

@@ -11,7 +11,8 @@ st.subheader("Your job pipeline")
 
 STATUSES = ["applied", "screening", "interview", "offer", "rejected", "withdrawn"]
 
-jobs = get_jobs()
+tester_name = st.session_state.get("tester_name", "default")
+jobs = get_jobs(tester_name)
 
 # Pipeline stats
 if jobs:
@@ -75,7 +76,7 @@ with st.expander("➕ Add New Job", expanded=len(jobs) == 0):
                     notes=notes if notes else None,
                     date_applied=str(date_applied)
                 )
-                create_job(new_job)
+                create_job(new_job, tester_name)
                 st.success(f"Added {role} at {company}!")
                 st.rerun()
 

@@ -10,13 +10,13 @@ apply_theme()
 st.title("🎯 Match")
 st.subheader("Score your resume against any job description")
 
-profile = get_profile()
-
+tester_name = st.session_state.get("tester_name", "default")
+profile = get_profile(tester_name)
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")
     st.stop()
 
-jobs = get_jobs()
+jobs = get_jobs(tester_name)
 
 if not jobs:
     st.warning("No jobs in your tracker yet. Go to Track and add a job first.")
@@ -96,6 +96,7 @@ if submitted:
                     certs=result.get("recommended_certs", []),
                     actions=result["recommended_actions"],
                     jd_text=jd_text,
+                    tester_name=tester_name,
                     job_id=job_id,
                     company=company,
                     role=role
@@ -142,7 +143,7 @@ if submitted:
 st.markdown("---")
 st.markdown("### 📋 Match History")
 
-all_results = get_all_match_results()
+all_results = get_all_match_results(tester_name)
 
 if not all_results:
     st.info("No matches scored yet. Select a job and paste a description above to get started.")

@@ -16,6 +16,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tester_name TEXT NOT NULL DEFAULT 'default',
             company TEXT NOT NULL,
             role TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'applied',
@@ -31,6 +32,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS profile (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tester_name TEXT NOT NULL DEFAULT 'default',
             resume_text TEXT NOT NULL,
             resume_filename TEXT,
             target_role TEXT NOT NULL,
@@ -41,6 +43,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS match_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tester_name TEXT NOT NULL DEFAULT 'default',
             job_id INTEGER,
             company TEXT,
             role TEXT,
@@ -55,25 +58,35 @@ def init_db():
             FOREIGN KEY (job_id) REFERENCES jobs(id)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS guide_progress (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tester_name TEXT NOT NULL DEFAULT 'default',
+            milestone_order INTEGER,
+            milestone_title TEXT,
+            completed INTEGER DEFAULT 0,
+            completed_at TEXT
+        )
+    """)
     conn.commit()
     conn.close()
 
-def create_job(job: Job) -> int:
+def create_job(job: Job, tester_name: str) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO jobs (company, role, status, url, location, salary_min, salary_max, notes, date_applied, date_updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))
-    """, (job.company, job.role, job.status, job.url, job.location, job.salary_min, job.salary_max, job.notes, job.date_applied))
+        INSERT INTO jobs (tester_name, company, role, status, url, location, salary_min, salary_max, notes, date_applied, date_updated)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))
+    """, (tester_name, job.company, job.role, job.status, job.url, job.location, job.salary_min, job.salary_max, job.notes, job.date_applied))
     conn.commit()
     job_id = cursor.lastrowid
     conn.close()
     return job_id
 
-def get_jobs() -> list:
+def get_jobs(tester_name: str) -> list:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM jobs ORDER BY date_updated DESC")
+    cursor.execute("SELECT * FROM jobs WHERE tester_name = ? ORDER BY date_updated DESC", (tester_name,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -104,41 +117,41 @@ def delete_job(job_id: int):
     conn.commit()
     conn.close()
 
-def save_profile(profile: Profile):
+def save_profile(profile: Profile, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM profile")
+    cursor.execute("DELETE FROM profile WHERE tester_name = ?", (tester_name,))
     cursor.execute("""
-        INSERT INTO profile (resume_text, resume_filename, target_role, goals, date_updated)
-        VALUES (?, ?, ?, ?, date('now'))
-    """, (profile.resume_text, profile.resume_filename, profile.target_role, profile.goals))
+        INSERT INTO profile (tester_name, resume_text, resume_filename, target_role, goals, date_updated)
+        VALUES (?, ?, ?, ?, ?, date('now'))
+    """, (tester_name, profile.resume_text, profile.resume_filename, profile.target_role, profile.goals))
     conn.commit()
     conn.close()
 
-def get_profile() -> Optional[dict]:
+def get_profile(tester_name: str) -> Optional[dict]:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM profile LIMIT 1")
+    cursor.execute("SELECT * FROM profile WHERE tester_name = ? LIMIT 1", (tester_name,))
     row = cursor.fetchone()
     conn.close()
     return dict(row) if row else None
 
-def save_match_result(score, summary, matched, missing, certs, actions, jd_text, job_id=None, company=None, role=None):
+def save_match_result(score, summary, matched, missing, certs, actions, jd_text, tester_name: str, job_id=None, company=None, role=None):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO match_results (job_id, company, role, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_certs, recommended_actions, jd_text)
-        VALUES (?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?)
-    """, (job_id, company, role, score, summary,
+        INSERT INTO match_results (tester_name, job_id, company, role, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_certs, recommended_actions, jd_text)
+        VALUES (?, ?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?)
+    """, (tester_name, job_id, company, role, score, summary,
           json.dumps(matched), json.dumps(missing),
           json.dumps(certs), json.dumps(actions), jd_text))
     conn.commit()
     conn.close()
 
-def get_all_match_results() -> list:
+def get_all_match_results(tester_name: str) -> list:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM match_results ORDER BY scored_at DESC")
+    cursor.execute("SELECT * FROM match_results WHERE tester_name = ? ORDER BY scored_at DESC", (tester_name,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -150,3 +163,22 @@ def get_match_results(job_id: int) -> list:
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+def save_milestone_progress(tester_name: str, milestone_order: int, milestone_title: str, completed: bool):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM guide_progress WHERE tester_name = ? AND milestone_order = ?", (tester_name, milestone_order))
+    cursor.execute("""
+        INSERT INTO guide_progress (tester_name, milestone_order, milestone_title, completed, completed_at)
+        VALUES (?, ?, ?, ?, CASE WHEN ? = 1 THEN date('now') ELSE NULL END)
+    """, (tester_name, milestone_order, milestone_title, int(completed), int(completed)))
+    conn.commit()
+    conn.close()
+
+def get_milestone_progress(tester_name: str) -> dict:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT milestone_order, completed FROM guide_progress WHERE tester_name = ?", (tester_name,))
+    rows = cursor.fetchall()
+    conn.close()
+    return {row["milestone_order"]: bool(row["completed"]) for row in rows}

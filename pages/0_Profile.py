@@ -10,7 +10,8 @@ apply_theme()
 st.title("👤 Profile")
 st.subheader("Your career profile")
 
-existing = get_profile()
+tester_name = st.session_state.get("tester_name", "default")
+existing = get_profile(tester_name)
 
 if existing:
     st.success(f"✅ Profile loaded — **{existing['resume_filename']}** uploaded. Target role: **{existing['target_role']}**")
@@ -61,6 +62,6 @@ with st.form("profile_form"):
                 target_role=target_role,
                 goals=goals if goals else None
             )
-            save_profile(profile)
+            save_profile(profile, tester_name)
             st.success("Profile saved!")
             st.rerun()
