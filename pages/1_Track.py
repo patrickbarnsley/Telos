@@ -1,8 +1,10 @@
 import streamlit as st
+from core.app_styles import apply_theme
 from core.database import init_db, create_job, get_jobs, update_job, delete_job
 from core.models import Job
 
 init_db()
+apply_theme()
 
 st.title("📋 Track")
 st.subheader("Your job pipeline")
@@ -20,7 +22,7 @@ if jobs:
     for i, status in enumerate(STATUSES):
         count = len([j for j in jobs if j["status"] == status])
         pct = round((count / total) * 100, 1) if total > 0 else 0
-        cols[i].metric(status.capitalize(), f"{count} ({pct}%)")
+        cols[i].metric(status.capitalize(), count)
 
     st.markdown("---")
 

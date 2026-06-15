@@ -1,9 +1,11 @@
 import streamlit as st
+from core.app_styles import apply_theme
 import json
 from core.database import init_db, get_profile, get_all_match_results
 from core.ai_engine import generate_critical_path, chat_with_advisor
 
 init_db()
+apply_theme()
 
 st.title("🗺️ Guide")
 st.subheader("Your critical path to your target role")

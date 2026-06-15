@@ -1,10 +1,13 @@
 import streamlit as st
+from core.app_styles import apply_theme
 
 st.set_page_config(
     page_title="Telos",
     page_icon="🎯",
     layout="wide"
 )
+
+apply_theme()
 
 st.title("🎯 Telos")
 st.subheader("Your career campaign, organized.")

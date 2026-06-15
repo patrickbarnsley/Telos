@@ -1,9 +1,11 @@
 import streamlit as st
+from core.app_styles import apply_theme
 from core.database import init_db, save_profile, get_profile
 from core.models import Profile
 from core.ai_engine import extract_resume_text
 
 init_db()
+apply_theme()
 
 st.title("👤 Profile")
 st.subheader("Your career profile")
