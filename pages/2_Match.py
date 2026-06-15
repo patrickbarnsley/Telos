@@ -10,7 +10,12 @@ apply_theme()
 st.title("🎯 Match")
 st.subheader("Score your resume against any job description")
 
-tester_name = st.session_state.get("tester_name", "default")
+if "tester_name" not in st.session_state or not st.session_state.tester_name:
+    st.warning("Please start from the home page first.")
+    st.page_link("app.py", label="← Go to Home")
+    st.stop()
+
+tester_name = st.session_state.tester_name
 profile = get_profile(tester_name)
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")

@@ -11,7 +11,12 @@ st.subheader("Your job pipeline")
 
 STATUSES = ["applied", "screening", "interview", "offer", "rejected", "withdrawn"]
 
-tester_name = st.session_state.get("tester_name", "default")
+if "tester_name" not in st.session_state or not st.session_state.tester_name:
+    st.warning("Please start from the home page first.")
+    st.page_link("app.py", label="← Go to Home")
+    st.stop()
+
+tester_name = st.session_state.tester_name
 jobs = get_jobs(tester_name)
 
 # Pipeline stats
