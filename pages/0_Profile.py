@@ -11,9 +11,13 @@ st.title("👤 Profile")
 st.subheader("Your career profile")
 
 if "tester_name" not in st.session_state or not st.session_state.tester_name:
-    st.warning("Please start from the home page first.")
-    st.page_link("app.py", label="← Go to Home")
-    st.stop()
+    params = st.query_params
+    if "tester" in params and params["tester"]:
+        st.session_state.tester_name = params["tester"]
+    else:
+        st.warning("Please start from the home page first.")
+        st.page_link("app.py", label="← Go to Home")
+        st.stop()
 
 tester_name = st.session_state.tester_name
 existing = get_profile(tester_name)

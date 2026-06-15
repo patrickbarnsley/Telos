@@ -8,8 +8,14 @@ st.set_page_config(
 )
 
 apply_theme()
+
 if "tester_name" not in st.session_state:
     st.session_state.tester_name = ""
+
+if not st.session_state.tester_name:
+    params = st.query_params
+    if "tester" in params and params["tester"]:
+        st.session_state.tester_name = params["tester"]
 
 if not st.session_state.tester_name:
     st.markdown("## Welcome to Telos Beta")
@@ -23,13 +29,14 @@ if not st.session_state.tester_name:
             st.error("Please enter your name.")
     st.stop()
 
+tester_param = st.session_state.tester_name
+
 st.markdown("""
 <style>
 .nav-card-link {
     text-decoration: none;
     display: block;
 }
-
 .nav-card {
     background-color: #0F1117;
     border: 2px solid #C9A84C;
@@ -44,49 +51,41 @@ st.markdown("""
     align-items: center;
     justify-content: center;
 }
-
 .nav-card:hover {
     box-shadow: 0 0 28px rgba(201, 168, 76, 0.25);
     transform: translateY(-3px);
     background-color: #1A1D27;
 }
-
 .nav-card .icon {
     font-size: 56px;
     margin-bottom: 16px;
     display: block;
 }
-
 .nav-card .title {
     color: #C9A84C;
     font-size: 22px;
     font-weight: 700;
     margin-bottom: 10px;
 }
-
 .nav-card .desc {
     color: #A0A7B8;
     font-size: 13px;
     line-height: 1.5;
 }
-
 .hero-title {
     font-size: 52px;
     font-weight: 700;
     color: #FFFFFF;
     margin-bottom: 4px;
 }
-
 .hero-accent {
     color: #C9A84C;
 }
-
 .hero-sub {
     font-size: 18px;
     color: #A0A7B8;
     margin-bottom: 48px;
 }
-
 .footer {
     color: #A0A7B8;
     font-size: 13px;
@@ -102,8 +101,8 @@ st.markdown('<div class="hero-sub">Your career campaign, organized.</div>', unsa
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.markdown("""
-    <a href="/Profile" target="_self" class="nav-card-link">
+    st.markdown(f"""
+    <a href="/Profile?tester={tester_param}" target="_self" class="nav-card-link">
         <div class="nav-card">
             <span class="icon">👤</span>
             <div class="title">Profile</div>
@@ -113,8 +112,8 @@ with col1:
     """, unsafe_allow_html=True)
 
 with col2:
-    st.markdown("""
-    <a href="/Track" target="_self" class="nav-card-link">
+    st.markdown(f"""
+    <a href="/Track?tester={tester_param}" target="_self" class="nav-card-link">
         <div class="nav-card">
             <span class="icon">☑️</span>
             <div class="title">Track</div>
@@ -124,8 +123,8 @@ with col2:
     """, unsafe_allow_html=True)
 
 with col3:
-    st.markdown("""
-    <a href="/Match" target="_self" class="nav-card-link">
+    st.markdown(f"""
+    <a href="/Match?tester={tester_param}" target="_self" class="nav-card-link">
         <div class="nav-card">
             <span class="icon">🎯</span>
             <div class="title">Match</div>
@@ -135,8 +134,8 @@ with col3:
     """, unsafe_allow_html=True)
 
 with col4:
-    st.markdown("""
-    <a href="/Guide" target="_self" class="nav-card-link">
+    st.markdown(f"""
+    <a href="/Guide?tester={tester_param}" target="_self" class="nav-card-link">
         <div class="nav-card">
             <span class="icon">🗺️</span>
             <div class="title">Guide</div>
