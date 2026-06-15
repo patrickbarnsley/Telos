@@ -68,6 +68,14 @@ def init_db():
             completed_at TEXT
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS critical_path (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tester_name TEXT NOT NULL,
+            generated_at TEXT,
+            path_json TEXT NOT NULL
+        )
+    """)
     try:
         cursor.execute("ALTER TABLE jobs ADD COLUMN tester_name TEXT NOT NULL DEFAULT 'default'")
     except Exception:
@@ -194,3 +202,24 @@ def get_milestone_progress(tester_name: str) -> dict:
     rows = cursor.fetchall()
     conn.close()
     return {row["milestone_order"]: bool(row["completed"]) for row in rows}
+
+def save_critical_path(tester_name: str, path: dict):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM critical_path WHERE tester_name = ?", (tester_name,))
+    cursor.execute("""
+        INSERT INTO critical_path (tester_name, generated_at, path_json)
+        VALUES (?, date('now'), ?)
+    """, (tester_name, json.dumps(path)))
+    conn.commit()
+    conn.close()
+
+def get_critical_path(tester_name: str) -> Optional[dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT path_json, generated_at FROM critical_path WHERE tester_name = ? LIMIT 1", (tester_name,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {"path": json.loads(row["path_json"]), "generated_at": row["generated_at"]}
+    return None

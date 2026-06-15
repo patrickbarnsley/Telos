@@ -1,7 +1,7 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
 import json
-from core.database import init_db, get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress
+from core.database import init_db, get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress, save_critical_path, get_critical_path
 from core.ai_engine import generate_critical_path, chat_with_advisor
 
 init_db()
@@ -21,27 +21,36 @@ if "tester_name" not in st.session_state or not st.session_state.tester_name:
 
 tester_name = st.session_state.tester_name
 profile = get_profile(tester_name)
+
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")
     st.stop()
 
 match_history = get_all_match_results(tester_name)
 
-if "critical_path" not in st.session_state:
-    st.session_state.critical_path = None
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
+
+saved = get_critical_path(tester_name)
+if "critical_path" not in st.session_state:
+    if saved:
+        st.session_state.critical_path = saved["path"]
+    else:
+        st.session_state.critical_path = None
 
 col1, col2 = st.columns([3, 1])
 with col1:
     st.markdown(f"**Target Role:** {profile['target_role']}")
     if profile.get('goals'):
         st.markdown(f"**Goals:** {profile['goals']}")
+    if saved:
+        st.markdown(f"_Last generated: {saved['generated_at']}_")
 with col2:
     if st.button("🔄 Generate Critical Path", type="primary"):
         with st.spinner("Building your critical path..."):
             try:
                 st.session_state.critical_path = generate_critical_path(profile, match_history)
+                save_critical_path(tester_name, st.session_state.critical_path)
                 st.session_state.chat_history = []
                 st.rerun()
             except Exception as e:
