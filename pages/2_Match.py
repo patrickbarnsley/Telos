@@ -1,7 +1,7 @@
 import streamlit as st
 import json
-from core.database import init_db, get_jobs, get_profile, save_match_result, get_match_results
-from core.ai_engine import score_match
+from core.database import init_db, get_jobs, get_profile, save_match_result, get_all_match_results
+from core.ai_engine import score_match, check_company_legitimacy
 
 init_db()
 
@@ -16,15 +16,15 @@ if not profile:
 
 jobs = get_jobs()
 
+if not jobs:
+    st.warning("No jobs in your tracker yet. Go to Track and add a job first.")
+    st.stop()
+
 st.markdown("### Paste a Job Description")
 
 with st.form("match_form"):
-    job_id = None
-    if jobs:
-        job_options = {f"{j['company']} — {j['role']}": j['id'] for j in jobs}
-        selected_job = st.selectbox("Link to a job in your tracker (optional)", ["None"] + list(job_options.keys()))
-        if selected_job != "None":
-            job_id = job_options[selected_job]
+    job_options = {f"{j['company']} — {j['role']}": j for j in jobs}
+    selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
 
     jd_text = st.text_area("Job Description", height=300, placeholder="Paste the full job description here...")
     submitted = st.form_submit_button("Score My Match")
@@ -33,7 +33,51 @@ if submitted:
     if not jd_text.strip():
         st.error("Please paste a job description.")
     else:
-        with st.spinner("Analyzing your match... this takes a few seconds."):
+        selected_job = job_options[selected_job_label]
+        job_id = selected_job["id"]
+        company = selected_job["company"]
+        role = selected_job["role"]
+
+        with st.spinner("Checking company legitimacy..."):
+            try:
+                scam_result = check_company_legitimacy(company, jd_text)
+            except Exception as e:
+                scam_result = {
+                    "verdict": "unknown",
+                    "confidence": "low",
+                    "summary": f"Could not complete company check: {str(e)}",
+                    "green_flags": [],
+                    "red_flags": []
+                }
+
+        verdict = scam_result.get("verdict", "unknown")
+        if verdict == "legitimate":
+            st.success(f"✅ **Company Check: Legitimate** (Confidence: {scam_result.get('confidence', 'unknown').capitalize()})")
+        elif verdict == "suspicious":
+            st.warning(f"⚠️ **Company Check: Suspicious** (Confidence: {scam_result.get('confidence', 'unknown').capitalize()})")
+        elif verdict == "likely_scam":
+            st.error(f"🚨 **Company Check: Likely Scam** (Confidence: {scam_result.get('confidence', 'unknown').capitalize()})")
+        else:
+            st.info("ℹ️ Company check inconclusive.")
+
+        st.markdown(f"_{scam_result.get('summary', '')}_")
+
+        if scam_result.get("green_flags") or scam_result.get("red_flags"):
+            col1, col2 = st.columns(2)
+            with col1:
+                if scam_result.get("green_flags"):
+                    st.markdown("**✅ Green Flags**")
+                    for flag in scam_result["green_flags"]:
+                        st.markdown(f"- {flag}")
+            with col2:
+                if scam_result.get("red_flags"):
+                    st.markdown("**🚩 Red Flags**")
+                    for flag in scam_result["red_flags"]:
+                        st.markdown(f"- {flag}")
+
+        st.markdown("---")
+
+        with st.spinner("Scoring your match..."):
             try:
                 result = score_match(
                     resume_text=profile["resume_text"],
@@ -41,18 +85,19 @@ if submitted:
                     target_role=profile["target_role"]
                 )
 
-                if job_id:
-                    save_match_result(
-                        job_id=job_id,
-                        score=result["overall_score"],
-                        summary=result["match_summary"],
-                        matched=result["matched_requirements"],
-                        missing=result["missing_requirements"],
-                        actions=result["recommended_actions"],
-                        jd_text=jd_text
-                    )
+                save_match_result(
+                    score=result["overall_score"],
+                    summary=result["match_summary"],
+                    matched=result["matched_requirements"],
+                    missing=result["missing_requirements"],
+                    certs=result.get("recommended_certs", []),
+                    actions=result["recommended_actions"],
+                    jd_text=jd_text,
+                    job_id=job_id,
+                    company=company,
+                    role=role
+                )
 
-                st.markdown("---")
                 st.markdown("### Match Results")
 
                 score = result["overall_score"]
@@ -67,21 +112,62 @@ if submitted:
                 st.markdown("---")
 
                 col1, col2 = st.columns(2)
-
                 with col1:
                     st.markdown("### ✅ What You Have")
                     for item in result["matched_requirements"]:
                         st.markdown(f"- {item}")
-
                 with col2:
                     st.markdown("### ❌ What You're Missing")
                     for item in result["missing_requirements"]:
                         st.markdown(f"- {item}")
 
                 st.markdown("---")
+
+                if result.get("recommended_certs"):
+                    st.markdown("### 🎓 Recommended Certifications")
+                    for cert in result["recommended_certs"]:
+                        st.markdown(f"- {cert}")
+                    st.markdown("---")
+
                 st.markdown("### 🔧 Recommended Actions")
                 for action in result["recommended_actions"]:
                     st.markdown(f"- {action}")
 
             except Exception as e:
                 st.error(f"Something went wrong: {str(e)}")
+
+st.markdown("---")
+st.markdown("### 📋 Match History")
+
+all_results = get_all_match_results()
+
+if not all_results:
+    st.info("No matches scored yet. Select a job and paste a description above to get started.")
+else:
+    for r in all_results:
+        label = f"{r['company']} — {r['role']}" if r['company'] and r['role'] else "Unlinked Job"
+        score = r["overall_score"]
+        date = r["scored_at"]
+
+        with st.expander(f"**{label}** | {score}% Match | {date}"):
+            st.markdown(f"**Summary:** {r['match_summary']}")
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**✅ What You Had**")
+                for item in json.loads(r["matched_reqs"]):
+                    st.markdown(f"- {item}")
+            with col2:
+                st.markdown("**❌ What Was Missing**")
+                for item in json.loads(r["missing_reqs"]):
+                    st.markdown(f"- {item}")
+
+            certs = json.loads(r["recommended_certs"]) if r["recommended_certs"] else []
+            if certs:
+                st.markdown("**🎓 Recommended Certs**")
+                for cert in certs:
+                    st.markdown(f"- {cert}")
+
+            st.markdown("**🔧 Recommended Actions**")
+            for action in json.loads(r["recommended_actions"]):
+                st.markdown(f"- {action}")

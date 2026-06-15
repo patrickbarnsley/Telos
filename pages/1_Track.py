@@ -13,11 +13,32 @@ jobs = get_jobs()
 
 # Pipeline stats
 if jobs:
+    total = len(jobs)
     st.markdown("### Pipeline")
+
     cols = st.columns(len(STATUSES))
     for i, status in enumerate(STATUSES):
         count = len([j for j in jobs if j["status"] == status])
-        cols[i].metric(status.capitalize(), count)
+        pct = round((count / total) * 100, 1) if total > 0 else 0
+        cols[i].metric(status.capitalize(), f"{count} ({pct}%)")
+
+    st.markdown("---")
+
+    st.markdown("### Funnel")
+    responded = len([j for j in jobs if j["status"] in ["screening", "interview", "offer", "rejected"]])
+    interviewed = len([j for j in jobs if j["status"] in ["interview", "offer"]])
+    offered = len([j for j in jobs if j["status"] == "offer"])
+
+    response_rate = round((responded / total) * 100, 1) if total > 0 else 0
+    interview_rate = round((interviewed / total) * 100, 1) if total > 0 else 0
+    offer_rate = round((offered / total) * 100, 1) if total > 0 else 0
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total Applications", total)
+    m2.metric("Response Rate", f"{response_rate}%")
+    m3.metric("Interview Rate", f"{interview_rate}%")
+    m4.metric("Offer Rate", f"{offer_rate}%")
+
     st.markdown("---")
 
 # Add new job form

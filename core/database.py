@@ -42,11 +42,14 @@ def init_db():
         CREATE TABLE IF NOT EXISTS match_results (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id INTEGER,
+            company TEXT,
+            role TEXT,
             scored_at TEXT,
             overall_score INTEGER,
             match_summary TEXT,
             matched_reqs TEXT,
             missing_reqs TEXT,
+            recommended_certs TEXT,
             recommended_actions TEXT,
             jd_text TEXT,
             FOREIGN KEY (job_id) REFERENCES jobs(id)
@@ -120,17 +123,25 @@ def get_profile() -> Optional[dict]:
     conn.close()
     return dict(row) if row else None
 
-def save_match_result(job_id, score, summary, matched, missing, actions, jd_text):
+def save_match_result(score, summary, matched, missing, certs, actions, jd_text, job_id=None, company=None, role=None):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO match_results (job_id, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_actions, jd_text)
-        VALUES (?, date('now'), ?, ?, ?, ?, ?, ?)
-    """, (job_id, score, summary, 
-          json.dumps(matched), json.dumps(missing), 
-          json.dumps(actions), jd_text))
+        INSERT INTO match_results (job_id, company, role, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_certs, recommended_actions, jd_text)
+        VALUES (?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?)
+    """, (job_id, company, role, score, summary,
+          json.dumps(matched), json.dumps(missing),
+          json.dumps(certs), json.dumps(actions), jd_text))
     conn.commit()
     conn.close()
+
+def get_all_match_results() -> list:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM match_results ORDER BY scored_at DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 def get_match_results(job_id: int) -> list:
     conn = get_connection()

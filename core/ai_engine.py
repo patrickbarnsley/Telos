@@ -61,8 +61,11 @@ Return ONLY a JSON object. No preamble, no explanation, no markdown formatting. 
   "match_summary": "<2-3 sentence plain-English summary of the match>",
   "matched_requirements": ["<requirement met>", "..."],
   "missing_requirements": ["<requirement not met or unclear>", "..."],
-  "recommended_actions": ["<specific action to improve this match>", "..."]
-}}"""
+  "recommended_certs": ["<specific certification that would strengthen this application, with brief reason why>", "..."],
+  "recommended_actions": ["<specific action to improve this match — not cert-related, those go above>", "..."]
+}}
+
+For recommended_certs: always include at least 1-3 relevant certifications if there are any gaps or if certs would strengthen the application. If the candidate already has all relevant certs, return an empty list. Be specific — name the exact certification."""
 
     message = client.messages.create(
         model="claude-opus-4-5",
@@ -77,4 +80,51 @@ Return ONLY a JSON object. No preamble, no explanation, no markdown formatting. 
         if response_text.startswith("json"):
             response_text = response_text[4:]
     response_text = response_text.strip()
+    return json.loads(response_text)
+
+def check_company_legitimacy(company_name: str, job_description: str) -> dict:
+    client = _get_client()
+
+    prompt = f"""Research the company "{company_name}" and evaluate whether this job posting appears legitimate or fraudulent.
+
+JOB DESCRIPTION:
+{job_description[:2000]}
+
+Search for this company online. Look for:
+- Official website and LinkedIn presence
+- Glassdoor or Indeed reviews and ratings
+- Any scam reports or fake job posting complaints
+- Whether the job details match the company's actual business
+- Red flags like requests for personal info, unrealistic pay, vague descriptions
+
+Return ONLY a JSON object. No preamble, no markdown:
+{{
+  "verdict": "<legitimate|suspicious|likely_scam>",
+  "confidence": "<high|medium|low>",
+  "summary": "<2-3 sentence plain English summary of what you found>",
+  "green_flags": ["<positive indicator>", "..."],
+  "red_flags": ["<warning sign>", "..."]
+}}
+
+If you cannot find information about the company, set verdict to "suspicious" and note this in the summary."""
+
+    message = client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=1500,
+        tools=[{"type": "web_search_20250305", "name": "web_search"}],
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    response_text = ""
+    for block in message.content:
+        if hasattr(block, 'type') and block.type == "text":
+            response_text += block.text
+
+    response_text = response_text.strip()
+    if response_text.startswith("```"):
+        response_text = response_text.split("```")[1]
+        if response_text.startswith("json"):
+            response_text = response_text[4:]
+    response_text = response_text.strip()
+
     return json.loads(response_text)
