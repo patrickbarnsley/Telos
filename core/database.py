@@ -68,6 +68,18 @@ def init_db():
             completed_at TEXT
         )
     """)
+    try:
+        cursor.execute("ALTER TABLE jobs ADD COLUMN tester_name TEXT NOT NULL DEFAULT 'default'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE profile ADD COLUMN tester_name TEXT NOT NULL DEFAULT 'default'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE match_results ADD COLUMN tester_name TEXT NOT NULL DEFAULT 'default'")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
