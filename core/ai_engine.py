@@ -70,11 +70,11 @@ For recommended_certs: always include at least 1-3 relevant certifications if th
     message = client.messages.create(
         model="claude-opus-4-5",
         max_tokens=1500,
+        temperature=0,
         messages=[{"role": "user", "content": prompt}]
     )
 
     response_text = message.content[0].text.strip()
-    # Strip markdown code fences if present
     if response_text.startswith("```"):
         response_text = response_text.split("```")[1]
         if response_text.startswith("json"):
@@ -90,43 +90,68 @@ def check_company_legitimacy(company_name: str, job_description: str) -> dict:
 JOB DESCRIPTION:
 {job_description[:2000]}
 
-Search for this company online. Look for:
-- Official website and LinkedIn presence
-- Glassdoor or Indeed reviews and ratings
-- Any scam reports or fake job posting complaints
-- Whether the job details match the company's actual business
-- Red flags like requests for personal info, unrealistic pay, vague descriptions
+Search for this company online. Look for official website, LinkedIn presence, Glassdoor reviews, any scam reports, whether job details match the company's actual business.
 
-Return ONLY a JSON object. No preamble, no markdown:
+After your research, return ONLY a JSON object — no other text:
 {{
   "verdict": "<legitimate|suspicious|likely_scam>",
   "confidence": "<high|medium|low>",
   "summary": "<2-3 sentence plain English summary of what you found>",
   "green_flags": ["<positive indicator>", "..."],
   "red_flags": ["<warning sign>", "..."]
-}}
+}}"""
 
-If you cannot find information about the company, set verdict to "suspicious" and note this in the summary."""
+    try:
+        message = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=1500,
+            tools=[{"type": "web_search_20250305", "name": "web_search"}],
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    message = client.messages.create(
-        model="claude-opus-4-5",
-        max_tokens=1500,
-        tools=[{"type": "web_search_20250305", "name": "web_search"}],
-        messages=[{"role": "user", "content": prompt}]
-    )
+        response_text = ""
+        for block in message.content:
+            if hasattr(block, 'type') and block.type == "text":
+                response_text += block.text
 
-    response_text = ""
-    for block in message.content:
-        if hasattr(block, 'type') and block.type == "text":
-            response_text += block.text
+        if not response_text.strip():
+            raise ValueError("Empty response from web search")
 
-    response_text = response_text.strip()
+    except Exception:
+        fallback_prompt = f"""Evaluate whether this job posting appears legitimate or potentially fraudulent based on the information provided.
+
+COMPANY NAME: {company_name}
+
+JOB DESCRIPTION:
+{job_description[:2000]}
+
+Look for red flags like vague company details, unrealistic salary, requests for personal info, poor grammar, or too-good-to-be-true promises. Also note any green flags like specific role details, realistic requirements, and professional tone.
+
+Return ONLY a JSON object:
+{{
+  "verdict": "<legitimate|suspicious|likely_scam>",
+  "confidence": "<high|medium|low>",
+  "summary": "<2-3 sentence plain English summary>",
+  "green_flags": ["<positive indicator>", "..."],
+  "red_flags": ["<warning sign>", "..."]
+}}"""
+
+        message = client.messages.create(
+            model="claude-opus-4-5",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": fallback_prompt}]
+        )
+        response_text = message.content[0].text.strip()
+
     if response_text.startswith("```"):
         response_text = response_text.split("```")[1]
         if response_text.startswith("json"):
             response_text = response_text[4:]
-    response_text = response_text.strip()
 
+    if "{" in response_text:
+        response_text = response_text[response_text.rfind("{"):response_text.rfind("}")+1]
+
+    response_text = response_text.strip()
     return json.loads(response_text)
 
 def generate_critical_path(profile: dict, match_history: list) -> dict:
