@@ -51,14 +51,15 @@ if submitted:
                 }
 
         verdict = scam_result.get("verdict", "unknown")
+        confidence = scam_result.get("confidence", "unknown").capitalize()
         if verdict == "legitimate":
-            st.success(f"✅ **Company Check: Legitimate** (Confidence: {scam_result.get('confidence', 'unknown').capitalize()})")
+            st.success(f"✅ **Company Verified** (Confidence: {confidence})")
         elif verdict == "suspicious":
-            st.warning(f"⚠️ **Company Check: Suspicious** (Confidence: {scam_result.get('confidence', 'unknown').capitalize()})")
+            st.warning(f"⚠️ **Proceed With Caution** (Confidence: {confidence})")
         elif verdict == "likely_scam":
-            st.error(f"🚨 **Company Check: Likely Scam** (Confidence: {scam_result.get('confidence', 'unknown').capitalize()})")
+            st.error(f"🚨 **Likely Scam** (Confidence: {confidence})")
         else:
-            st.info("ℹ️ Company check inconclusive.")
+            st.info("ℹ️ **Check Unavailable** — could not complete company verification.")
 
         st.markdown(f"_{scam_result.get('summary', '')}_")
 
