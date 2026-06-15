@@ -34,6 +34,9 @@ def show_help(page_name: str):
     from core.help_content import HELP_CONTENT
     content = HELP_CONTENT.get(page_name, HELP_CONTENT["app"])
     with st.sidebar:
+        tester = st.session_state.get("tester_name", "")
+        if tester:
+            st.markdown(f"👤 **Logged in as:** {tester}")
         st.markdown("---")
         with st.expander("❓ Help — " + content["title"]):
             for i, step in enumerate(content["steps"], 1):
