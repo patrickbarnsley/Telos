@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme
+from core.app_styles import apply_theme, show_help
 from core.database import init_db, create_job, get_jobs, update_job, delete_job
 from core.models import Job
 
@@ -119,3 +119,5 @@ else:
                 if st.button("🗑️ Delete", key=f"del_{job['id']}"):
                     delete_job(job["id"])
                     st.rerun()
+
+show_help("Track")

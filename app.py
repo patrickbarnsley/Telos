@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme
+from core.app_styles import apply_theme, show_help
 
 st.set_page_config(
     page_title="Telos",
@@ -147,3 +147,5 @@ with col4:
 
 st.markdown("---")
 st.markdown('<div class="footer">Telos — from the Greek for <em>ultimate purpose</em>. Built to help you find and reach yours.</div>', unsafe_allow_html=True)
+
+show_help("app")

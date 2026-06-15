@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme
+from core.app_styles import apply_theme, show_help
 import json
 from core.database import init_db, get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress
 from core.ai_engine import generate_critical_path, chat_with_advisor
@@ -132,3 +132,5 @@ else:
     st.markdown("---")
     st.info("Click **Generate Critical Path** to build your personalized roadmap.")
     st.markdown("Telos will analyze your resume, target role, and match history to build a specific step-by-step path to your goal.")
+
+show_help("Guide")

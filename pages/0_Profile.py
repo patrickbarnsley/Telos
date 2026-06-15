@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme
+from core.app_styles import apply_theme, show_help
 from core.database import init_db, save_profile, get_profile
 from core.models import Profile
 from core.ai_engine import extract_resume_text
@@ -65,3 +65,5 @@ with st.form("profile_form"):
             save_profile(profile, tester_name)
             st.success("Profile saved!")
             st.rerun()
+
+show_help("Profile")

@@ -137,3 +137,15 @@ def apply_theme():
     }
     </style>
     """, unsafe_allow_html=True)
+
+def show_help(page_name: str):
+    from core.help_content import HELP_CONTENT
+    content = HELP_CONTENT.get(page_name, HELP_CONTENT["app"])
+    
+    with st.sidebar:
+        st.markdown("---")
+        with st.expander("❓ Help — " + content["title"]):
+            for i, step in enumerate(content["steps"], 1):
+                st.markdown(f"**{i}.** {step}")
+            st.markdown("---")
+            st.info(f"💡 {content['tip']}")

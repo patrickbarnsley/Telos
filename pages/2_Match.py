@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme
+from core.app_styles import apply_theme, show_help
 import json
 from core.database import init_db, get_jobs, get_profile, save_match_result, get_all_match_results
 from core.ai_engine import score_match, check_company_legitimacy
@@ -175,3 +175,5 @@ else:
             st.markdown("**🔧 Recommended Actions**")
             for action in json.loads(r["recommended_actions"]):
                 st.markdown(f"- {action}")
+
+show_help("Match")
