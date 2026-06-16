@@ -12,7 +12,14 @@ def apply_theme():
     h1 { color: #FFFFFF; font-weight: 700; }
     h2 { color: #FFFFFF; font-weight: 600; }
     h3 { color: #C9A84C; font-weight: 600; }
-    [data-testid="stExpander"] { background-color: #1A1D27; border: 1px solid #2D3148; border-radius: 8px; }
+    [data-testid="stExpander"] { background-color: #1A1D27; border: 1px solid #2D3148; border-radius: 8px; color: #FFFFFF; }
+    [data-testid="stExpander"] p { color: #FFFFFF; }
+    [data-testid="stExpander"] li { color: #FFFFFF; }
+    [data-testid="stExpander"] label { color: #FFFFFF !important; }
+    [data-testid="stExpanderDetails"] { color: #FFFFFF; }
+    .streamlit-expanderContent { color: #FFFFFF; }
+    .streamlit-expanderContent p { color: #FFFFFF; }
+    .streamlit-expanderContent li { color: #FFFFFF; }
     [data-testid="metric-container"] { background-color: #1A1D27; border: 1px solid #2D3148; border-radius: 8px; padding: 16px; }
     .stButton > button { background-color: #C9A84C; color: #0F1117; border: none; border-radius: 6px; font-weight: 600; padding: 8px 20px; transition: all 0.2s ease; }
     .stButton > button:hover { background-color: #E0BC5E; color: #0F1117; transform: translateY(-1px); }
