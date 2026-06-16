@@ -447,3 +447,90 @@ def get_match_page_data(tester_name: str) -> dict:
         "resume_versions": [dict(r) for r in resume_versions],
         "match_results": [dict(r) for r in match_results]
     }
+
+def get_outcome_correlation(tester_name: str) -> list:
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("""
+        SELECT 
+            j.company,
+            j.role,
+            j.status,
+            j.outcome_date,
+            j.match_predictive,
+            MAX(m.overall_score) as best_match_score,
+            COUNT(m.id) as total_match_runs,
+            j.date_applied
+        FROM jobs j
+        LEFT JOIN match_results m ON j.id = m.job_id
+        WHERE j.tester_name = %s
+        AND j.status IN ('offer', 'rejected', 'interview')
+        GROUP BY j.id, j.company, j.role, j.status, j.outcome_date, j.match_predictive, j.date_applied
+        ORDER BY j.outcome_date DESC NULLS LAST
+    """, (tester_name,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_all_outcome_correlations() -> list:
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("""
+        SELECT 
+            j.tester_name,
+            j.company,
+            j.role,
+            j.status,
+            j.outcome_date,
+            j.match_predictive,
+            MAX(m.overall_score) as best_match_score,
+            COUNT(m.id) as total_match_runs,
+            j.date_applied
+        FROM jobs j
+        LEFT JOIN match_results m ON j.id = m.job_id
+        WHERE j.status IN ('offer', 'rejected', 'interview')
+        GROUP BY j.id, j.tester_name, j.company, j.role, j.status, j.outcome_date, j.match_predictive, j.date_applied
+        ORDER BY j.outcome_date DESC NULLS LAST
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_usage_over_time() -> list:
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("""
+        SELECT 
+            scored_at as date,
+            tester_name,
+            'match' as activity_type,
+            COUNT(*) as count
+        FROM match_results
+        WHERE scored_at IS NOT NULL
+        GROUP BY scored_at, tester_name
+        UNION ALL
+        SELECT 
+            date_updated as date,
+            tester_name,
+            'job' as activity_type,
+            COUNT(*) as count
+        FROM jobs
+        WHERE date_updated IS NOT NULL
+        GROUP BY date_updated, tester_name
+        UNION ALL
+        SELECT 
+            generated_at as date,
+            tester_name,
+            'critical_path' as activity_type,
+            COUNT(*) as count
+        FROM critical_path
+        WHERE generated_at IS NOT NULL
+        GROUP BY generated_at, tester_name
+        ORDER BY date DESC
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [dict(row) for row in rows]
