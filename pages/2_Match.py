@@ -138,6 +138,7 @@ if submitted:
 
                 if result.get("recommended_certs"):
                     st.markdown("### 🎓 Recommended Certifications")
+                    st.caption("⚠️ AI-generated — verify each certification exists before pursuing it.")
                     for cert in result["recommended_certs"]:
                         st.markdown(f"- {cert}")
                     st.markdown("---")

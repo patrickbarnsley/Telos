@@ -40,9 +40,10 @@ if "critical_path" not in st.session_state:
 
 col1, col2 = st.columns([3, 1])
 with col1:
-    st.markdown(f"**Target Role:** {profile['target_role']}")
-    if profile.get('goals'):
-        st.markdown(f"**Goals:** {profile['goals']}")
+        st.markdown("### 🎓 Critical Certifications")
+        st.caption("⚠️ AI-generated — verify each certification exists before pursuing it.")
+        for cert in cp.get("critical_certs", []):
+            st.markdown(f"- {cert}")
     if saved:
         st.markdown(f"_Last generated: {saved['generated_at']}_")
 with col2:

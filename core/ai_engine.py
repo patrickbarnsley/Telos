@@ -65,7 +65,7 @@ Return ONLY a JSON object. No preamble, no explanation, no markdown formatting. 
   "recommended_actions": ["<specific action to improve this match — not cert-related, those go above>", "..."]
 }}
 
-For recommended_certs: always include at least 1-3 relevant certifications if there are any gaps or if certs would strengthen the application. If the candidate already has all relevant certs, return an empty list. Be specific — name the exact certification."""
+For recommended_certs: only recommend certifications from real, verifiable professional organizations you are certain exist. Include the full certification name and the issuing organization. If you are not certain a certification body is real and established, omit it entirely. Never recommend certifications sourced from forums, Reddit, or community discussions. It is better to return fewer recommendations or an empty list than to recommend something that cannot be verified."""
 
     message = client.messages.create(
         model="claude-opus-4-5",
@@ -197,12 +197,14 @@ Return ONLY a JSON object. No preamble, no markdown:
       "success_criteria": "<how you know this milestone is complete>"
     }}
   ],
-  "critical_certs": ["<cert name — reason it matters for target role>", "..."],
+  "critical_certs": ["<cert name from verified professional organization — issuing body and reason it matters>", "..."],
   "estimated_timeline": "<total estimated time to reach target role>",
   "biggest_risk": "<the single biggest thing that could derail this path>"
 }}
 
-Include 4-6 milestones ordered by priority. Be honest about timeline — don't sugarcoat it."""
+Include 4-6 milestones ordered by priority. Be honest about timeline — don't sugarcoat it.
+
+For critical_certs: only recommend certifications from established, verifiable professional organizations. Include the issuing organization name alongside the cert name. If you cannot confirm a certification body is real and established, omit it. Never fabricate certification bodies, acronyms, or programs sourced from forums or community discussions. Return an empty list rather than recommend something unverifiable."""
 
     message = client.messages.create(
         model="claude-opus-4-5",
