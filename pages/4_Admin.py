@@ -34,7 +34,7 @@ if not st.session_state.admin_auth:
 
 st.success("Logged in as admin.")
 
-tab1, tab2, tab3 = st.tabs(["Testers", "Match Results", "Feedback Summary"])
+tab1, tab2, tab3, tab4 = st.tabs(["Testers", "Match Results", "Cert Hallucinations", "Guide Critical Paths"])
 
 with tab1:
     st.markdown("### Registered Testers")
@@ -114,3 +114,42 @@ with tab3:
         st.markdown(f"**Total cert recommendations across all testers: {len(all_certs)}**")
         for c in all_certs:
             st.markdown(f"- **{c['tester']}** applying to {c['company']} ({c['role']}): _{c['cert']}_")
+
+with tab4:
+    st.markdown("### Guide Critical Paths")
+    st.markdown("Review all generated critical paths and cert recommendations from Guide.")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT tester_name, generated_at, path_json
+        FROM critical_path
+        ORDER BY generated_at DESC
+    """)
+    paths = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    if not paths:
+        st.info("No critical paths generated yet.")
+    else:
+        for p in paths:
+            path = json.loads(p['path_json'])
+            certs = path.get('critical_certs', [])
+            milestones = path.get('milestones', [])
+
+            with st.expander(f"**{p['tester_name']}** — Generated: {p['generated_at']}"):
+                st.markdown(f"**Current State:** {path.get('current_state', '')}")
+                st.markdown(f"**Target State:** {path.get('target_state', '')}")
+                st.markdown(f"**Estimated Timeline:** {path.get('estimated_timeline', '')}")
+                st.markdown(f"**Biggest Risk:** {path.get('biggest_risk', '')}")
+
+                st.markdown("**Critical Certs Recommended:**")
+                if certs:
+                    for cert in certs:
+                        st.markdown(f"- {cert}")
+                else:
+                    st.markdown("_None recommended_")
+
+                st.markdown("**Milestones:**")
+                for m in milestones:
+                    st.markdown(f"- Milestone {m.get('order')}: {m.get('title')} ({m.get('timeline')})")
