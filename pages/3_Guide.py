@@ -31,21 +31,22 @@ match_history = get_all_match_results(tester_name)
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-saved = get_critical_path(tester_name)
 if "critical_path" not in st.session_state:
+    saved = get_critical_path(tester_name)
     if saved:
         st.session_state.critical_path = saved["path"]
+        st.session_state.critical_path_date = saved["generated_at"]
     else:
         st.session_state.critical_path = None
+        st.session_state.critical_path_date = None
 
 col1, col2 = st.columns([3, 1])
 with col1:
-        st.markdown("### 🎓 Critical Certifications")
-        st.caption("⚠️ AI-generated — verify each certification exists before pursuing it.")
-        for cert in cp.get("critical_certs", []):
-            st.markdown(f"- {cert}")
-    if saved:
-        st.markdown(f"_Last generated: {saved['generated_at']}_")
+    st.markdown(f"**Target Role:** {profile['target_role']}")
+    if profile.get('goals'):
+        st.markdown(f"**Goals:** {profile['goals']}")
+    if st.session_state.get("critical_path_date"):
+        st.markdown(f"_Last generated: {st.session_state.critical_path_date}_")
 with col2:
     if st.button("🔄 Generate Critical Path", type="primary"):
         with st.spinner("Building your critical path..."):
@@ -105,6 +106,7 @@ if st.session_state.critical_path:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 🎓 Critical Certifications")
+        st.caption("⚠️ AI-generated — verify each certification exists before pursuing it.")
         for cert in cp.get("critical_certs", []):
             st.markdown(f"- {cert}")
     with col2:
