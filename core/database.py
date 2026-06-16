@@ -8,14 +8,15 @@ from core.models import Job, Profile
 
 load_dotenv()
 
-def get_connection():
+def get_db_url():
     try:
         import streamlit as st
-        db_url = st.secrets["DATABASE_URL"]
+        return st.secrets["DATABASE_URL"]
     except Exception:
-        db_url = os.getenv("DATABASE_URL")
-    conn = psycopg2.connect(db_url)
-    return conn
+        return os.getenv("DATABASE_URL")
+
+def get_connection():
+    return psycopg2.connect(get_db_url(), connect_timeout=10)
 
 def init_db():
     conn = get_connection()
@@ -386,3 +387,63 @@ def delete_career_path(path_id: int):
     conn.commit()
     cursor.close()
     conn.close()
+
+def get_guide_data(tester_name: str, career_path_id: int = None) -> dict:
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    cursor.execute("SELECT * FROM profile WHERE tester_name = %s LIMIT 1", (tester_name,))
+    profile = cursor.fetchone()
+
+    cursor.execute("SELECT * FROM match_results WHERE tester_name = %s ORDER BY scored_at DESC", (tester_name,))
+    match_history = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM career_paths WHERE tester_name = %s ORDER BY path_type DESC, created_at ASC", (tester_name,))
+    career_paths = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM resume_versions WHERE tester_name = %s AND deleted_at IS NULL ORDER BY created_at DESC", (tester_name,))
+    resume_versions = cursor.fetchall()
+
+    cursor.execute("SELECT path_json, generated_at FROM critical_path WHERE tester_name = %s AND career_path_id IS NOT DISTINCT FROM %s LIMIT 1", (tester_name, career_path_id))
+    critical_path = cursor.fetchone()
+
+    cursor.execute("SELECT milestone_order, completed FROM guide_progress WHERE tester_name = %s AND career_path_id IS NOT DISTINCT FROM %s", (tester_name, career_path_id))
+    progress = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return {
+        "profile": dict(profile) if profile else None,
+        "match_history": [dict(r) for r in match_history],
+        "career_paths": [dict(r) for r in career_paths],
+        "resume_versions": [dict(r) for r in resume_versions],
+        "critical_path": {"path": json.loads(critical_path["path_json"]), "generated_at": critical_path["generated_at"]} if critical_path else None,
+        "progress": {row["milestone_order"]: bool(row["completed"]) for row in progress}
+    }
+
+def get_match_page_data(tester_name: str) -> dict:
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+    cursor.execute("SELECT * FROM profile WHERE tester_name = %s LIMIT 1", (tester_name,))
+    profile = cursor.fetchone()
+
+    cursor.execute("SELECT * FROM jobs WHERE tester_name = %s ORDER BY date_updated DESC NULLS LAST", (tester_name,))
+    jobs = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM resume_versions WHERE tester_name = %s AND deleted_at IS NULL ORDER BY created_at DESC", (tester_name,))
+    resume_versions = cursor.fetchall()
+
+    cursor.execute("SELECT * FROM match_results WHERE tester_name = %s ORDER BY scored_at DESC", (tester_name,))
+    match_results = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return {
+        "profile": dict(profile) if profile else None,
+        "jobs": [dict(r) for r in jobs],
+        "resume_versions": [dict(r) for r in resume_versions],
+        "match_results": [dict(r) for r in match_results]
+    }

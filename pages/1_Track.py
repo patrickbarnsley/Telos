@@ -1,9 +1,8 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
-from core.database import init_db, create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats, get_match_results
+from core.database import create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats, get_match_results
 from core.models import Job
 
-init_db()
 apply_theme()
 
 st.title("📋 Track")

@@ -1,5 +1,6 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
+from core.database import init_db
 
 st.set_page_config(
     page_title="Telos",
@@ -8,6 +9,12 @@ st.set_page_config(
 )
 
 apply_theme()
+
+@st.cache_resource
+def initialize_database():
+    init_db()
+
+initialize_database()
 
 if "tester_name" not in st.session_state:
     st.session_state.tester_name = ""

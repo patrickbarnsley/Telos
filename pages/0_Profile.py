@@ -1,10 +1,9 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
-from core.database import init_db, save_profile, get_profile, create_career_path, get_career_paths, delete_career_path, save_resume_version, get_resume_versions, set_active_resume, delete_resume_version, get_active_resume
+from core.database import save_profile, get_profile, create_career_path, get_career_paths, delete_career_path, save_resume_version, get_resume_versions, set_active_resume, delete_resume_version, get_active_resume
 from core.models import Profile
 from core.ai_engine import extract_resume_text
 
-init_db()
 apply_theme()
 
 st.title("👤 Profile")

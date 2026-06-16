@@ -1,10 +1,9 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
 import json
-from core.database import init_db, get_jobs, get_profile, save_match_result, get_all_match_results, get_resume_versions, get_active_resume, delete_match_result
+from core.database import get_jobs, get_profile, save_match_result, get_all_match_results, get_resume_versions, get_active_resume, delete_match_result, get_match_page_data
 from core.ai_engine import score_match, check_company_legitimacy
 
-init_db()
 apply_theme()
 
 st.title("🎯 Match")
@@ -20,20 +19,21 @@ if "tester_name" not in st.session_state or not st.session_state.tester_name:
         st.stop()
 
 tester_name = st.session_state.tester_name
-profile = get_profile(tester_name)
+page_data = get_match_page_data(tester_name)
+profile = page_data["profile"]
 
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")
     st.stop()
 
-jobs = get_jobs(tester_name)
+jobs = page_data["jobs"]
 
 if not jobs:
     st.warning("No jobs in your tracker yet. Go to Track and add a job first.")
     st.stop()
 
-resume_versions = get_resume_versions(tester_name)
-active_resume = get_active_resume(tester_name)
+resume_versions = page_data["resume_versions"]
+active_resume = next((v for v in resume_versions if v["is_active"] == 1), None)
 
 st.markdown("### Paste a Job Description")
 
@@ -183,7 +183,7 @@ st.markdown("---")
 st.markdown("---")
 st.markdown("### 📋 Match History")
 
-all_results = get_all_match_results(tester_name)
+all_results = page_data["match_results"]
 
 if not all_results:
     st.info("No matches scored yet. Select a job and paste a description above to get started.")

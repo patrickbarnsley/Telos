@@ -2,12 +2,11 @@ import streamlit as st
 import json
 import os
 from core.app_styles import apply_theme
-from core.database import init_db, get_connection
+from core.database import get_connection
 from dotenv import load_dotenv
 
 load_dotenv()
 
-init_db()
 apply_theme()
 
 st.title("🔐 Telos Admin")
