@@ -1,6 +1,6 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
-from core.database import init_db, create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats
+from core.database import init_db, create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats, get_match_results
 from core.models import Job
 
 init_db()
@@ -72,6 +72,7 @@ with tab1:
                 salary_min = st.number_input("Salary Min", min_value=0, value=0)
                 salary_max = st.number_input("Salary Max", min_value=0, value=0)
             career_path_selection = st.selectbox("Career Path", path_names)
+            selected_path_id_for_job = next((p["id"] for p in career_paths if p["path_name"] == career_path_selection), None) if career_path_selection != "None" else None
             notes = st.text_area("Notes")
             submitted = st.form_submit_button("Add Job")
 
@@ -89,7 +90,7 @@ with tab1:
                         salary_max=salary_max if salary_max > 0 else None,
                         notes=notes if notes else None,
                         date_applied=str(date_applied),
-                        career_path=career_path_selection if career_path_selection != "None" else None
+                        career_path_id=selected_path_id_for_job
                     )
                     create_job(new_job, tester_name)
                     st.success(f"Added {role} at {company}!")
@@ -111,7 +112,8 @@ with tab1:
         if filter_status != "All":
             filtered_jobs = [j for j in filtered_jobs if j["status"] == filter_status]
         if filter_path != "All":
-            filtered_jobs = [j for j in filtered_jobs if j.get("career_path") == filter_path]
+            filter_path_id = next((p["id"] for p in career_paths if p["path_name"] == filter_path), None)
+            filtered_jobs = [j for j in filtered_jobs if j.get("career_path_id") == filter_path_id]
 
         for job in filtered_jobs:
             with st.expander(f"**{job['company']}** — {job['role']} | {job['status'].replace('_', ' ').capitalize()}"):
@@ -126,8 +128,9 @@ with tab1:
                         e_location = st.text_input("Location", value=job["location"] or "")
                         e_notes = st.text_area("Notes", value=job["notes"] or "")
 
-                        current_path = job.get("career_path") or "None"
-                        path_idx = path_names.index(current_path) if current_path in path_names else 0
+                        current_path_id = job.get("career_path_id")
+                        current_path_name = next((p["path_name"] for p in career_paths if p["id"] == current_path_id), "None")
+                        path_idx = path_names.index(current_path_name) if current_path_name in path_names else 0
                         e_career_path = st.selectbox("Career Path", path_names, index=path_idx)
 
                         if e_status in OUTCOME_STATUSES:
@@ -143,6 +146,7 @@ with tab1:
                             e_predictive = None
 
                         if st.form_submit_button("Save Changes"):
+                            e_path_id = next((p["id"] for p in career_paths if p["path_name"] == e_career_path), None)
                             update_fields = {
                                 "company": e_company,
                                 "role": e_role,
@@ -150,7 +154,7 @@ with tab1:
                                 "url": e_url or None,
                                 "location": e_location or None,
                                 "notes": e_notes or None,
-                                "career_path": e_career_path if e_career_path != "None" else None
+                                "career_path_id": e_path_id
                             }
                             if e_outcome_date:
                                 update_fields["outcome_date"] = str(e_outcome_date)

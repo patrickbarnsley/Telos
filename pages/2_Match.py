@@ -1,7 +1,7 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
 import json
-from core.database import init_db, get_jobs, get_profile, save_match_result, get_all_match_results
+from core.database import init_db, get_jobs, get_profile, save_match_result, get_all_match_results, get_resume_versions, get_active_resume, delete_match_result
 from core.ai_engine import score_match, check_company_legitimacy
 
 init_db()
@@ -21,6 +21,7 @@ if "tester_name" not in st.session_state or not st.session_state.tester_name:
 
 tester_name = st.session_state.tester_name
 profile = get_profile(tester_name)
+
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")
     st.stop()
@@ -31,6 +32,9 @@ if not jobs:
     st.warning("No jobs in your tracker yet. Go to Track and add a job first.")
     st.stop()
 
+resume_versions = get_resume_versions(tester_name)
+active_resume = get_active_resume(tester_name)
+
 st.markdown("### Paste a Job Description")
 
 with st.form("match_form"):
@@ -38,9 +42,16 @@ with st.form("match_form"):
     selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
 
     jd_text = st.text_area("Job Description", height=300, placeholder="Paste the full job description here...")
+    st.caption("📏 Maximum 10,000 characters analyzed. Most job descriptions are well within this limit.")
 
-    st.markdown("**Resume Version (optional)**")
-    resume_version = st.text_input("Label this resume version", placeholder="e.g. Original, Updated summary, Added security certs")
+    if resume_versions:
+        version_options = {f"{v['version_label']} — {v['resume_filename']}{'  ✅' if v['is_active'] else ''}": v for v in resume_versions}
+        default_idx = next((i for i, v in enumerate(resume_versions) if v["is_active"]), 0)
+        selected_version_label = st.selectbox("Resume Version to Score", list(version_options.keys()), index=default_idx)
+        selected_version = version_options[selected_version_label]
+    else:
+        selected_version = None
+        st.info("No resume versions found. Upload a resume in Profile first.")
 
     submitted = st.form_submit_button("Score My Match")
 
@@ -95,8 +106,12 @@ if submitted:
 
         with st.spinner("Scoring your match..."):
             try:
+                resume_to_use = selected_version["resume_text"] if selected_version else profile["resume_text"]
+                resume_label = selected_version["version_label"] if selected_version else "Default"
+                resume_id = selected_version["id"] if selected_version else None
+
                 result = score_match(
-                    resume_text=profile["resume_text"],
+                    resume_text=resume_to_use,
                     job_description=jd_text,
                     target_role=profile["target_role"]
                 )
@@ -113,18 +128,27 @@ if submitted:
                     job_id=job_id,
                     company=company,
                     role=role,
-                    resume_version=resume_version if resume_version else "Original"
+                    resume_version_id=resume_id,
+                    resume_version_label=resume_label,
+                    resume_snapshot=resume_to_use
                 )
 
                 st.markdown("### Match Results")
 
+                st.info("ℹ️ **About this score:** Telos scores your resume the way a real ATS system would — strictly. Industry estimates suggest 70-75% of resumes are automatically rejected by ATS before a human ever sees them. A score below 70% means a real ATS may filter out your application. A score of 75%+ improves your chances of passing initial screening, but is not a guarantee.")
+
+                if len(jd_text) > 10000:
+                    st.warning(f"⚠️ Your job description was {len(jd_text):,} characters. Only the first 10,000 were analyzed.")
+                else:
+                    st.caption(f"📏 {len(jd_text):,} characters analyzed.")
+
                 score = result["overall_score"]
                 if score >= 75:
                     st.success(f"### {score}% Match")
-                elif score >= 50:
-                    st.warning(f"### {score}% Match")
+                elif score >= 60:
+                    st.warning(f"### {score}% Match — May be filtered by ATS")
                 else:
-                    st.error(f"### {score}% Match")
+                    st.error(f"### {score}% Match — High risk of ATS rejection")
 
                 st.markdown(f"**Summary:** {result['match_summary']}")
                 st.markdown("---")
@@ -167,9 +191,15 @@ else:
         label = f"{r['company']} — {r['role']}" if r['company'] and r['role'] else "Unlinked Job"
         score = r["overall_score"]
         date = r["scored_at"]
+        version = r.get("resume_version_label") or "Original"
 
-        version = r.get("resume_version") or "Original"
         with st.expander(f"**{label}** | {score}% Match | {version} | {date}"):
+            col_main, col_del = st.columns([10, 1])
+            with col_del:
+                if st.button("🗑️", key=f"del_match_{r['id']}"):
+                    delete_match_result(r["id"])
+                    st.rerun()
+
             st.markdown(f"**Summary:** {r['match_summary']}")
 
             col1, col2 = st.columns(2)

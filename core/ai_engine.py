@@ -43,24 +43,32 @@ def _extract_from_docx(file_bytes: bytes) -> str:
 def score_match(resume_text: str, job_description: str, target_role: str) -> dict:
     client = _get_client()
 
-    prompt = f"""You are a reverse ATS (Applicant Tracking System) engine. Score how well this candidate's resume matches the job description — the way a real ATS and hiring manager would evaluate it.
+    prompt = f"""You are a strict ATS (Applicant Tracking System) engine. Your job is to score resumes the way enterprise ATS software actually does — not the way a generous human recruiter would.
+
+IMPORTANT SCORING CALIBRATION:
+- 90-100: Resume could be submitted as-is. Near-perfect keyword and requirement match.
+- 75-89: Strong match with minor gaps. Likely passes ATS screening.
+- 60-74: Moderate match. Real ATS systems would likely filter this out before a human sees it.
+- Below 60: Poor match. Would be automatically rejected by most ATS systems.
+
+Be strict. Most ATS systems reject 70-75% of resumes. Do not score generously. A missing required skill, certification, or experience area should meaningfully lower the score. Do not give credit for skills that are implied but not explicitly stated in the resume.
 
 CANDIDATE'S TARGET ROLE: {target_role}
 
 CANDIDATE'S RESUME:
-{resume_text}
+{resume_text[:10000]}
 
 JOB DESCRIPTION:
 {job_description}
 
-Analyze the match carefully. Consider required skills, years of experience, education, certifications, industry background, and soft skills.
+Analyze strictly. Only count requirements as met if they are explicitly and clearly demonstrated in the resume. Implied experience does not count. Missing required qualifications must lower the score significantly.
 
 Return ONLY a JSON object. No preamble, no explanation, no markdown formatting. Just the raw JSON:
 {{
   "overall_score": <integer 0-100>,
-  "match_summary": "<2-3 sentence plain-English summary of the match>",
-  "matched_requirements": ["<requirement met>", "..."],
-  "missing_requirements": ["<requirement not met or unclear>", "..."],
+  "match_summary": "<2-3 sentence plain-English summary of the match — be direct about gaps>",
+  "matched_requirements": ["<requirement explicitly met in resume>", "..."],
+  "missing_requirements": ["<requirement missing or only implied, not explicit>", "..."],
   "recommended_certs": ["<specific certification that would strengthen this application, with brief reason why>", "..."],
   "recommended_actions": ["<specific action to improve this match — not cert-related, those go above>", "..."]
 }}
@@ -88,9 +96,11 @@ def check_company_legitimacy(company_name: str, job_description: str) -> dict:
     prompt = f"""Research the company "{company_name}" and evaluate whether this job posting appears legitimate or fraudulent.
 
 JOB DESCRIPTION:
-{job_description[:2000]}
+{job_description[:10000]}
 
 Search for this company online. Look for official website, LinkedIn presence, Glassdoor reviews, any scam reports, whether job details match the company's actual business.
+
+Note: Job postings hosted on Workday, Greenhouse, Lever, iCIMS, BambooHR, ADP, or similar enterprise ATS platforms are strong green flags — these are paid enterprise systems that scammers do not use. A job description that appears cut off is NOT a red flag — it may simply be a display limit in our system. Focus on whether the company itself is real and legitimate, not on formatting of the posting.
 
 After your research, return ONLY a JSON object — no other text:
 {{
@@ -123,7 +133,7 @@ After your research, return ONLY a JSON object — no other text:
 COMPANY NAME: {company_name}
 
 JOB DESCRIPTION:
-{job_description[:2000]}
+{job_description[:10000]}
 
 Look for red flags like vague company details, unrealistic salary, requests for personal info, poor grammar, or too-good-to-be-true promises. Also note any green flags like specific role details, realistic requirements, and professional tone.
 
@@ -175,7 +185,7 @@ Target Role: {profile['target_role']}
 Career Goals: {profile.get('goals', 'Not specified')}
 
 RESUME SUMMARY:
-{profile['resume_text'][:3000]}
+{profile['resume_text'][:10000]}
 
 RECENT JOB MATCH ANALYSIS:
 {match_summary if match_summary else 'No match history yet.'}

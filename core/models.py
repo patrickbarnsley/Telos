@@ -12,7 +12,7 @@ class Job:
     salary_max: Optional[int] = None
     notes: Optional[str] = None
     date_applied: Optional[str] = None
-    career_path: Optional[str] = None
+    career_path_id: Optional[int] = None
     id: Optional[int] = None
 
 @dataclass
