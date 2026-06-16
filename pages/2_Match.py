@@ -180,6 +180,7 @@ if submitted:
                 st.error(f"Something went wrong: {str(e)}")
 
 st.markdown("---")
+st.markdown("---")
 st.markdown("### 📋 Match History")
 
 all_results = get_all_match_results(tester_name)
@@ -187,39 +188,121 @@ all_results = get_all_match_results(tester_name)
 if not all_results:
     st.info("No matches scored yet. Select a job and paste a description above to get started.")
 else:
-    for r in all_results:
-        label = f"{r['company']} — {r['role']}" if r['company'] and r['role'] else "Unlinked Job"
-        score = r["overall_score"]
-        date = r["scored_at"]
-        version = r.get("resume_version_label") or "Original"
+    col_f1, col_f2, col_f3 = st.columns(3)
 
-        with st.expander(f"**{label}** | {score}% Match | {version} | {date}"):
-            col_main, col_del = st.columns([10, 1])
-            with col_del:
-                if st.button("🗑️", key=f"del_match_{r['id']}"):
-                    delete_match_result(r["id"])
-                    st.rerun()
+    with col_f1:
+        all_versions = sorted(list(set([r.get("resume_version_label") or "Original" for r in all_results])))
+        version_filter = st.selectbox("Filter by resume version", ["All"] + all_versions)
 
-            st.markdown(f"**Summary:** {r['match_summary']}")
+    with col_f2:
+        all_dates = sorted(list(set([r["scored_at"] for r in all_results if r["scored_at"]])), reverse=True)
+        date_filter = st.selectbox("Filter by date", ["All"] + all_dates)
+
+    with col_f3:
+        search_term = st.text_input("Search by company or role", placeholder="e.g. Google, Product Manager")
+
+    filtered_results = all_results
+    if version_filter != "All":
+        filtered_results = [r for r in filtered_results if (r.get("resume_version_label") or "Original") == version_filter]
+    if date_filter != "All":
+        filtered_results = [r for r in filtered_results if r["scored_at"] == date_filter]
+    if search_term:
+        search_lower = search_term.lower()
+        filtered_results = [r for r in filtered_results if
+            search_lower in (r.get("company") or "").lower() or
+            search_lower in (r.get("role") or "").lower()]
+
+    if not filtered_results:
+        st.info("No matches found with current filters.")
+    else:
+        if "compare_selected" not in st.session_state:
+            st.session_state.compare_selected = []
+
+        st.caption("☑️ Check up to 2 results to compare them side by side.")
+
+        selected_ids = []
+
+        for r in filtered_results:
+            label = f"{r.get('company', 'Unknown')} — {r.get('role', 'Unknown')}"
+            score = r["overall_score"]
+            date = r["scored_at"]
+            version = r.get("resume_version_label") or "Original"
+
+            if score >= 75:
+                score_label = f"✅ {score}%"
+            elif score >= 60:
+                score_label = f"⚠️ {score}%"
+            else:
+                score_label = f"🔴 {score}%"
+
+            col_check, col_content = st.columns([1, 11])
+
+            with col_check:
+                checked = st.checkbox("Compare", key=f"compare_{r['id']}", value=r["id"] in st.session_state.compare_selected, label_visibility="collapsed")
+                if checked and r["id"] not in selected_ids:
+                    selected_ids.append(r["id"])
+
+            with col_content:
+                with st.expander(f"**{label}** | {score_label} | {version} | {date}"):
+                    st.markdown(f"**Summary:** {r['match_summary']}")
+
+                    matched = json.loads(r["matched_reqs"]) if r["matched_reqs"] else []
+                    missing = json.loads(r["missing_reqs"]) if r["missing_reqs"] else []
+                    certs = json.loads(r["recommended_certs"]) if r["recommended_certs"] else []
+                    actions = json.loads(r["recommended_actions"]) if r["recommended_actions"] else []
+
+                    if matched:
+                        st.markdown("**✅ What You Had**")
+                        for item in matched:
+                            st.markdown(f"- {item}")
+
+                    if missing:
+                        st.markdown("**❌ What Was Missing**")
+                        for item in missing:
+                            st.markdown(f"- {item}")
+
+                    if certs:
+                        st.markdown("**🎓 Recommended Certs**")
+                        st.caption("⚠️ AI-generated — verify before pursuing.")
+                        for cert in certs:
+                            st.markdown(f"- {cert}")
+
+                    if actions:
+                        st.markdown("**🔧 Recommended Actions**")
+                        for action in actions:
+                            st.markdown(f"- {action}")
+
+                    if st.button("🗑️ Delete", key=f"del_match_{r['id']}"):
+                        delete_match_result(r["id"])
+                        st.rerun()
+
+        st.session_state.compare_selected = selected_ids
+
+        if len(selected_ids) == 2:
+            st.markdown("---")
+            st.markdown("### 🔄 Comparison View")
+            results_to_compare = [r for r in all_results if r["id"] in selected_ids]
 
             col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("**✅ What You Had**")
-                for item in json.loads(r["matched_reqs"]):
-                    st.markdown(f"- {item}")
-            with col2:
-                st.markdown("**❌ What Was Missing**")
-                for item in json.loads(r["missing_reqs"]):
-                    st.markdown(f"- {item}")
-
-            certs = json.loads(r["recommended_certs"]) if r["recommended_certs"] else []
-            if certs:
-                st.markdown("**🎓 Recommended Certs**")
-                for cert in certs:
-                    st.markdown(f"- {cert}")
-
-            st.markdown("**🔧 Recommended Actions**")
-            for action in json.loads(r["recommended_actions"]):
-                st.markdown(f"- {action}")
+            for i, r in enumerate(results_to_compare):
+                col = col1 if i == 0 else col2
+                with col:
+                    version = r.get("resume_version_label") or "Original"
+                    score = r["overall_score"]
+                    st.markdown(f"#### {version}")
+                    if score >= 75:
+                        st.success(f"**{score}% Match**")
+                    elif score >= 60:
+                        st.warning(f"**{score}% Match**")
+                    else:
+                        st.error(f"**{score}% Match**")
+                    st.markdown(f"_{r['match_summary']}_")
+                    missing = json.loads(r["missing_reqs"]) if r["missing_reqs"] else []
+                    if missing:
+                        st.markdown("**❌ Gaps:**")
+                        for item in missing:
+                            st.markdown(f"- {item}")
+        elif len(selected_ids) > 2:
+            st.warning("Select only 2 results to compare.")
 
 show_help("Match")

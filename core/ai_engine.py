@@ -234,16 +234,27 @@ For critical_certs: only recommend certifications from established, verifiable p
 def chat_with_advisor(profile: dict, critical_path: dict, conversation_history: list, user_message: str) -> str:
     client = _get_client()
 
-    system = f"""You are a direct, no-nonsense career advisor. You have the candidate's profile and their generated critical path. Give specific, actionable advice. No generic resume tips. No cheerleading. Be honest.
+    system = f"""You are a direct, no-nonsense career advisor. You have full access to the candidate's profile, resume, and career paths. Give specific, actionable advice based on what you know about them. No generic tips. No cheerleading. Be honest.
 
 CANDIDATE TARGET ROLE: {profile['target_role']}
 CAREER GOALS: {profile.get('goals', 'Not specified')}
 
+CANDIDATE RESUME:
+{profile.get('resume_text', 'Not provided')[:5000]}
+
+ALL CAREER PATHS:
+{json.dumps(profile.get('all_paths', []))}
+
+CURRENT PATH: {profile.get('current_path_name', 'Master Roadmap')}
+
 CRITICAL PATH SUMMARY:
 Current State: {critical_path.get('current_state', '')}
 Target State: {critical_path.get('target_state', '')}
+Gap Summary: {critical_path.get('gap_summary', '')}
 Estimated Timeline: {critical_path.get('estimated_timeline', '')}
-Biggest Risk: {critical_path.get('biggest_risk', '')}"""
+Biggest Risk: {critical_path.get('biggest_risk', '')}
+
+You know this person's background from their resume. Never say you don't have their profile — you do. Reference specific details from their resume when giving advice."""
 
     history = conversation_history + [{"role": "user", "content": user_message}]
 

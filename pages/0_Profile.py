@@ -45,6 +45,14 @@ with tab1:
                     if not is_active:
                         if st.button("Set as Active", key=f"active_{v['id']}"):
                             set_active_resume(tester_name, v["id"])
+                            existing_profile = get_profile(tester_name)
+                            profile = Profile(
+                                resume_text=v["resume_text"],
+                                resume_filename=v["resume_filename"],
+                                target_role=existing_profile["target_role"] if existing_profile else "Not set",
+                                goals=existing_profile["goals"] if existing_profile else None
+                            )
+                            save_profile(profile, tester_name)
                             st.success(f"'{v['version_label']}' is now your active resume.")
                             st.rerun()
                 with col2:
@@ -71,13 +79,15 @@ with tab1:
                     try:
                         resume_text = extract_resume_text(uploaded_file)
                         save_resume_version(tester_name, version_label, resume_text, uploaded_file.name, set_as_active)
-                        # Also save to legacy profile for backward compatibility
-                        profile = Profile(
-                            resume_text=resume_text,
-                            resume_filename=uploaded_file.name,
-                            target_role=get_profile(tester_name)["target_role"] if get_profile(tester_name) else "Not set"
-                        )
-                        save_profile(profile, tester_name)
+                        if set_as_active:
+                            existing_profile = get_profile(tester_name)
+                            profile = Profile(
+                                resume_text=resume_text,
+                                resume_filename=uploaded_file.name,
+                                target_role=existing_profile["target_role"] if existing_profile else "Not set",
+                                goals=existing_profile["goals"] if existing_profile else None
+                            )
+                            save_profile(profile, tester_name)
                         st.success(f"Resume '{version_label}' uploaded successfully!")
                         st.rerun()
                     except ValueError as e:
