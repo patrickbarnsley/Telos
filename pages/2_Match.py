@@ -38,6 +38,10 @@ with st.form("match_form"):
     selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
 
     jd_text = st.text_area("Job Description", height=300, placeholder="Paste the full job description here...")
+
+    st.markdown("**Resume Version (optional)**")
+    resume_version = st.text_input("Label this resume version", placeholder="e.g. Original, Updated summary, Added security certs")
+
     submitted = st.form_submit_button("Score My Match")
 
 if submitted:
@@ -108,7 +112,8 @@ if submitted:
                     tester_name=tester_name,
                     job_id=job_id,
                     company=company,
-                    role=role
+                    role=role,
+                    resume_version=resume_version if resume_version else "Original"
                 )
 
                 st.markdown("### Match Results")
@@ -163,7 +168,8 @@ else:
         score = r["overall_score"]
         date = r["scored_at"]
 
-        with st.expander(f"**{label}** | {score}% Match | {date}"):
+        version = r.get("resume_version") or "Original"
+        with st.expander(f"**{label}** | {score}% Match | {version} | {date}"):
             st.markdown(f"**Summary:** {r['match_summary']}")
 
             col1, col2 = st.columns(2)

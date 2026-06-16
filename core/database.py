@@ -26,7 +26,10 @@ def init_db():
             salary_max INTEGER,
             notes TEXT,
             date_applied TEXT,
-            date_updated TEXT
+            date_updated TEXT,
+            outcome_date TEXT,
+            match_predictive TEXT,
+            career_path TEXT
         )
     """)
     cursor.execute("""
@@ -38,6 +41,16 @@ def init_db():
             target_role TEXT NOT NULL,
             goals TEXT,
             date_updated TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS career_paths (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tester_name TEXT NOT NULL,
+            path_name TEXT NOT NULL,
+            target_role TEXT NOT NULL,
+            goals TEXT,
+            created_at TEXT
         )
     """)
     cursor.execute("""
@@ -55,6 +68,7 @@ def init_db():
             recommended_certs TEXT,
             recommended_actions TEXT,
             jd_text TEXT,
+            resume_version TEXT,
             FOREIGN KEY (job_id) REFERENCES jobs(id)
         )
     """)
@@ -81,11 +95,27 @@ def init_db():
     except Exception:
         pass
     try:
+        cursor.execute("ALTER TABLE jobs ADD COLUMN outcome_date TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE jobs ADD COLUMN match_predictive TEXT")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE jobs ADD COLUMN career_path TEXT")
+    except Exception:
+        pass
+    try:
         cursor.execute("ALTER TABLE profile ADD COLUMN tester_name TEXT NOT NULL DEFAULT 'default'")
     except Exception:
         pass
     try:
         cursor.execute("ALTER TABLE match_results ADD COLUMN tester_name TEXT NOT NULL DEFAULT 'default'")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE match_results ADD COLUMN resume_version TEXT")
     except Exception:
         pass
     conn.commit()
@@ -95,9 +125,9 @@ def create_job(job: Job, tester_name: str) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO jobs (tester_name, company, role, status, url, location, salary_min, salary_max, notes, date_applied, date_updated)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'))
-    """, (tester_name, job.company, job.role, job.status, job.url, job.location, job.salary_min, job.salary_max, job.notes, job.date_applied))
+        INSERT INTO jobs (tester_name, company, role, status, url, location, salary_min, salary_max, notes, date_applied, date_updated, career_path)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, date('now'), ?)
+    """, (tester_name, job.company, job.role, job.status, job.url, job.location, job.salary_min, job.salary_max, job.notes, job.date_applied, job.career_path))
     conn.commit()
     job_id = cursor.lastrowid
     conn.close()
@@ -156,15 +186,15 @@ def get_profile(tester_name: str) -> Optional[dict]:
     conn.close()
     return dict(row) if row else None
 
-def save_match_result(score, summary, matched, missing, certs, actions, jd_text, tester_name: str, job_id=None, company=None, role=None):
+def save_match_result(score, summary, matched, missing, certs, actions, jd_text, tester_name: str, job_id=None, company=None, role=None, resume_version=None):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO match_results (tester_name, job_id, company, role, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_certs, recommended_actions, jd_text)
-        VALUES (?, ?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO match_results (tester_name, job_id, company, role, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_certs, recommended_actions, jd_text, resume_version)
+        VALUES (?, ?, ?, ?, date('now'), ?, ?, ?, ?, ?, ?, ?, ?)
     """, (tester_name, job_id, company, role, score, summary,
           json.dumps(matched), json.dumps(missing),
-          json.dumps(certs), json.dumps(actions), jd_text))
+          json.dumps(certs), json.dumps(actions), jd_text, resume_version))
     conn.commit()
     conn.close()
 
@@ -180,6 +210,27 @@ def get_match_results(job_id: int) -> list:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM match_results WHERE job_id = ? ORDER BY scored_at DESC", (job_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def get_company_stats(tester_name: str) -> list:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT
+            j.company,
+            COUNT(DISTINCT j.id) as total_applications,
+            COUNT(m.id) as total_match_runs,
+            MAX(m.overall_score) as best_score,
+            MIN(j.date_applied) as first_applied,
+            MAX(j.date_updated) as last_activity
+        FROM jobs j
+        LEFT JOIN match_results m ON j.id = m.job_id
+        WHERE j.tester_name = ?
+        GROUP BY j.company
+        ORDER BY last_activity DESC
+    """, (tester_name,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -223,3 +274,30 @@ def get_critical_path(tester_name: str) -> Optional[dict]:
     if row:
         return {"path": json.loads(row["path_json"]), "generated_at": row["generated_at"]}
     return None
+
+def create_career_path(tester_name: str, path_name: str, target_role: str, goals: str = None) -> int:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO career_paths (tester_name, path_name, target_role, goals, created_at)
+        VALUES (?, ?, ?, ?, date('now'))
+    """, (tester_name, path_name, target_role, goals))
+    conn.commit()
+    path_id = cursor.lastrowid
+    conn.close()
+    return path_id
+
+def get_career_paths(tester_name: str) -> list:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM career_paths WHERE tester_name = ? ORDER BY created_at DESC", (tester_name,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+def delete_career_path(path_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM career_paths WHERE id = ?", (path_id,))
+    conn.commit()
+    conn.close()
