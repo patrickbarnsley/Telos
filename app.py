@@ -25,10 +25,10 @@ if not st.session_state.tester_name:
         st.session_state.tester_name = params["tester"]
 
 if not st.session_state.tester_name:
-    st.markdown("## Welcome to Telos Beta")
-    st.markdown("Enter your name to get started. This keeps your data separate from other testers.")
+    st.markdown("## Welcome to Telos")
+    st.markdown("Enter your name to get started.")
     name_input = st.text_input("Your name", placeholder="e.g. Sarah")
-    if st.button("Start Testing"):
+    if st.button("Get Started"):
         if name_input.strip():
             st.session_state.tester_name = name_input.strip()
             st.rerun()

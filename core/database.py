@@ -123,6 +123,22 @@ def init_db():
         )
     """)
 
+    # --- Salary split migration (idempotent; safe to run on every startup) ---
+    # Adds posted/requested salary columns to existing jobs tables without
+    # touching data. CREATE TABLE IF NOT EXISTS won't alter an existing table,
+    # so the columns are added explicitly here.
+    cursor.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS posted_salary_min INTEGER")
+    cursor.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS posted_salary_max INTEGER")
+    cursor.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS requested_salary_min INTEGER")
+    cursor.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS requested_salary_max INTEGER")
+    # Migrate any existing single-range salary data into the posted columns,
+    # once, without overwriting values that have already been set.
+    cursor.execute("UPDATE jobs SET posted_salary_min = salary_min WHERE posted_salary_min IS NULL AND salary_min IS NOT NULL")
+    cursor.execute("UPDATE jobs SET posted_salary_max = salary_max WHERE posted_salary_max IS NULL AND salary_max IS NOT NULL")
+
+    # Job description now lives on the job (entered in Track, auto-loaded in Match).
+    cursor.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jd_text TEXT")
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -131,10 +147,20 @@ def create_job(job: Job, tester_name: str) -> int:
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO jobs (tester_name, company, role, status, url, location, salary_min, salary_max, notes, date_applied, date_updated, career_path_id)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE::text, %s)
+        INSERT INTO jobs (
+            tester_name, company, role, status, url, location,
+            posted_salary_min, posted_salary_max,
+            requested_salary_min, requested_salary_max,
+            notes, jd_text, date_applied, date_updated, career_path_id
+        )
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_DATE::text, %s)
         RETURNING id
-    """, (tester_name, job.company, job.role, job.status, job.url, job.location, job.salary_min, job.salary_max, job.notes, job.date_applied, job.career_path_id))
+    """, (
+        tester_name, job.company, job.role, job.status, job.url, job.location,
+        job.posted_salary_min, job.posted_salary_max,
+        job.requested_salary_min, job.requested_salary_max,
+        job.notes, job.jd_text, job.date_applied, job.career_path_id
+    ))
     job_id = cursor.fetchone()[0]
     conn.commit()
     cursor.close()

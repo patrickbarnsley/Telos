@@ -1,10 +1,12 @@
 import pdfplumber
 import docx
 import io
+import base64
 import anthropic
 import json
 import os
 from dotenv import load_dotenv
+from PIL import Image
 
 load_dotenv()
 
@@ -39,6 +41,46 @@ def _extract_from_docx(file_bytes: bytes) -> str:
     doc = docx.Document(io.BytesIO(file_bytes))
     text = "\n".join([para.text for para in doc.paragraphs if para.text.strip()])
     return text.strip()
+
+def extract_jd_from_image(uploaded_file) -> str:
+    """Extract job-description text from an uploaded screenshot/image via Claude vision.
+    Returns the transcribed text for the user to review before saving."""
+    client = _get_client()
+    raw = uploaded_file.read()
+
+    # Normalize any uploaded image to PNG so we accept whatever format the user has.
+    try:
+        img = Image.open(io.BytesIO(raw))
+        if img.mode not in ("RGB", "L"):
+            img = img.convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        image_bytes = buf.getvalue()
+    except Exception:
+        image_bytes = raw  # fall back to the original bytes
+
+    b64 = base64.standard_b64encode(image_bytes).decode("utf-8")
+
+    prompt = (
+        "Extract the job posting text from this image as accurately as possible. "
+        "Return only the text of the posting itself — role, responsibilities, requirements, "
+        "qualifications, and any salary or company details shown. Preserve the wording. "
+        "Do not add commentary, invented headings, or a summary. If part of the image is cut "
+        "off or unreadable, transcribe what is visible and do not guess at the rest."
+    )
+
+    message = client.messages.create(
+        model="claude-opus-4-5",
+        max_tokens=3000,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": b64}},
+                {"type": "text", "text": prompt},
+            ],
+        }],
+    )
+    return message.content[0].text.strip()
 
 def score_match(resume_text: str, job_description: str, target_role: str) -> dict:
     client = _get_client()

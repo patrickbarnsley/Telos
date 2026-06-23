@@ -2,6 +2,7 @@ import streamlit as st
 from core.app_styles import apply_theme, show_help
 from core.database import create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats, get_match_results
 from core.models import Job
+from core.ai_engine import extract_jd_from_image
 
 apply_theme()
 
@@ -21,6 +22,18 @@ tester_name = st.session_state.tester_name
 
 STATUSES = ["applied", "screening", "interview", "offer", "rejected", "withdrawn", "recruiter_outreach"]
 OUTCOME_STATUSES = ["offer", "rejected"]
+
+
+def fmt_salary(lo, hi):
+    """Format a salary range for display. Returns None if both ends are empty."""
+    if not lo and not hi:
+        return None
+    if lo and hi:
+        return f"${lo:,} – ${hi:,}"
+    if lo:
+        return f"${lo:,}+"
+    return f"Up to ${hi:,}"
+
 
 jobs = get_jobs(tester_name)
 career_paths = get_career_paths(tester_name)
@@ -58,7 +71,51 @@ with tab1:
         st.markdown("---")
 
     with st.expander("➕ Add New Job", expanded=len(jobs) == 0):
-        with st.form("add_job_form"):
+        # Reset the JD box after a successful add (must run before the widget is created).
+        if st.session_state.pop("_reset_add_jd", False):
+            st.session_state["add_jd"] = ""
+            st.session_state.pop("_add_jd_pending", None)
+        st.session_state.setdefault("add_jd", "")
+
+        st.markdown("**Job Description (optional)**")
+        st.caption("Type or paste it below, or extract it from a screenshot. It auto-loads in Match.")
+        shot = st.file_uploader(
+            "Screenshot of the job posting",
+            type=["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"],
+            key="add_jd_shot"
+        )
+        if shot is not None and st.button("📷 Extract text from screenshot", key="add_jd_extract"):
+            extracted = None
+            try:
+                with st.spinner("Reading the screenshot..."):
+                    extracted = extract_jd_from_image(shot)
+            except Exception as e:
+                st.error(f"Couldn't read that image: {e}")
+            if extracted is not None:
+                if st.session_state["add_jd"].strip():
+                    st.session_state["_add_jd_pending"] = extracted
+                else:
+                    st.session_state["add_jd"] = extracted
+                st.rerun()
+
+        if st.session_state.get("_add_jd_pending"):
+            st.warning("You already have description text entered. Replace it with the extracted text?")
+            rc1, rc2 = st.columns(2)
+            if rc1.button("Replace", key="add_jd_replace"):
+                st.session_state["add_jd"] = st.session_state.pop("_add_jd_pending")
+                st.rerun()
+            if rc2.button("Keep what I have", key="add_jd_keep"):
+                st.session_state.pop("_add_jd_pending", None)
+                st.rerun()
+
+        st.text_area(
+            "Review the description",
+            key="add_jd",
+            height=180,
+            placeholder="The job description will appear here for you to review and edit before saving."
+        )
+
+        with st.form("add_job_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
                 company = st.text_input("Company *")
@@ -68,8 +125,18 @@ with tab1:
             with col2:
                 url = st.text_input("Job URL")
                 location = st.text_input("Location")
-                salary_min = st.number_input("Salary Min", min_value=0, value=0)
-                salary_max = st.number_input("Salary Max", min_value=0, value=0)
+
+            st.markdown("**Salary**")
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                st.caption("Posted range (from the listing)")
+                posted_min = st.number_input("Posted Min", min_value=0, value=0, key="add_posted_min")
+                posted_max = st.number_input("Posted Max", min_value=0, value=0, key="add_posted_max")
+            with sc2:
+                st.caption("Your requested range")
+                requested_min = st.number_input("Requested Min", min_value=0, value=0, key="add_req_min")
+                requested_max = st.number_input("Requested Max", min_value=0, value=0, key="add_req_max")
+
             career_path_selection = st.selectbox("Career Path", path_names)
             selected_path_id_for_job = next((p["id"] for p in career_paths if p["path_name"] == career_path_selection), None) if career_path_selection != "None" else None
             notes = st.text_area("Notes")
@@ -79,20 +146,25 @@ with tab1:
                 if not company or not role:
                     st.error("Company and Role are required.")
                 else:
+                    jd_val = st.session_state.get("add_jd", "")
                     new_job = Job(
                         company=company,
                         role=role,
                         status=status,
                         url=url if url else None,
                         location=location if location else None,
-                        salary_min=salary_min if salary_min > 0 else None,
-                        salary_max=salary_max if salary_max > 0 else None,
+                        posted_salary_min=posted_min if posted_min > 0 else None,
+                        posted_salary_max=posted_max if posted_max > 0 else None,
+                        requested_salary_min=requested_min if requested_min > 0 else None,
+                        requested_salary_max=requested_max if requested_max > 0 else None,
                         notes=notes if notes else None,
+                        jd_text=jd_val if jd_val.strip() else None,
                         date_applied=str(date_applied),
                         career_path_id=selected_path_id_for_job
                     )
                     create_job(new_job, tester_name)
                     st.success(f"Added {role} at {company}!")
+                    st.session_state["_reset_add_jd"] = True
                     st.rerun()
 
     st.markdown("---")
@@ -125,7 +197,20 @@ with tab1:
                         e_status = st.selectbox("Status", STATUSES, index=STATUSES.index(job["status"]) if job["status"] in STATUSES else 0)
                         e_url = st.text_input("URL", value=job["url"] or "")
                         e_location = st.text_input("Location", value=job["location"] or "")
+
+                        st.markdown("**Salary**")
+                        esc1, esc2 = st.columns(2)
+                        with esc1:
+                            st.caption("Posted range")
+                            e_posted_min = st.number_input("Posted Min", min_value=0, value=job.get("posted_salary_min") or 0, key=f"epmin_{job['id']}")
+                            e_posted_max = st.number_input("Posted Max", min_value=0, value=job.get("posted_salary_max") or 0, key=f"epmax_{job['id']}")
+                        with esc2:
+                            st.caption("Requested range")
+                            e_req_min = st.number_input("Requested Min", min_value=0, value=job.get("requested_salary_min") or 0, key=f"ermin_{job['id']}")
+                            e_req_max = st.number_input("Requested Max", min_value=0, value=job.get("requested_salary_max") or 0, key=f"ermax_{job['id']}")
+
                         e_notes = st.text_area("Notes", value=job["notes"] or "")
+                        e_jd_text = st.text_area("Job Description", value=job.get("jd_text") or "", height=150, key=f"jd_{job['id']}", placeholder="Paste the job description here — it'll auto-load in Match.")
 
                         current_path_id = job.get("career_path_id")
                         current_path_name = next((p["path_name"] for p in career_paths if p["id"] == current_path_id), "None")
@@ -152,7 +237,12 @@ with tab1:
                                 "status": e_status,
                                 "url": e_url or None,
                                 "location": e_location or None,
+                                "posted_salary_min": e_posted_min if e_posted_min > 0 else None,
+                                "posted_salary_max": e_posted_max if e_posted_max > 0 else None,
+                                "requested_salary_min": e_req_min if e_req_min > 0 else None,
+                                "requested_salary_max": e_req_max if e_req_max > 0 else None,
                                 "notes": e_notes or None,
+                                "jd_text": e_jd_text if e_jd_text.strip() else None,
                                 "career_path_id": e_path_id
                             }
                             if e_outcome_date:
@@ -164,6 +254,12 @@ with tab1:
                             st.rerun()
 
                 with col2:
+                    posted_range = fmt_salary(job.get("posted_salary_min"), job.get("posted_salary_max"))
+                    requested_range = fmt_salary(job.get("requested_salary_min"), job.get("requested_salary_max"))
+                    if posted_range:
+                        st.markdown(f"**Posted:** {posted_range}")
+                    if requested_range:
+                        st.markdown(f"**Requested:** {requested_range}")
                     if job.get("outcome_date"):
                         st.markdown(f"**Outcome:** {job['outcome_date']}")
                     if job.get("match_predictive"):

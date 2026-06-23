@@ -35,13 +35,20 @@ if not jobs:
 resume_versions = page_data["resume_versions"]
 active_resume = next((v for v in resume_versions if v["is_active"] == 1), None)
 
-st.markdown("### Paste a Job Description")
+st.markdown("### Score a Job")
+
+job_options = {f"{j['company']} — {j['role']}": j for j in jobs}
+selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
+selected_job = job_options[selected_job_label]
+saved_jd = selected_job.get("jd_text") or ""
+
+if saved_jd:
+    st.caption("✅ Loaded the description saved for this job in Track. You can edit it here for this score — your saved version won't change.")
+else:
+    st.caption("No description saved for this job yet. Paste one below, or add it in Track and it'll auto-load next time.")
 
 with st.form("match_form"):
-    job_options = {f"{j['company']} — {j['role']}": j for j in jobs}
-    selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
-
-    jd_text = st.text_area("Job Description", height=300, placeholder="Paste the full job description here...")
+    jd_text = st.text_area("Job Description", value=saved_jd, height=300, key=f"jd_input_{selected_job['id']}", placeholder="Paste the full job description here...")
     st.caption("📏 Maximum 10,000 characters analyzed. Most job descriptions are well within this limit.")
 
     if resume_versions:
@@ -59,7 +66,6 @@ if submitted:
     if not jd_text.strip():
         st.error("Please paste a job description.")
     else:
-        selected_job = job_options[selected_job_label]
         job_id = selected_job["id"]
         company = selected_job["company"]
         role = selected_job["role"]

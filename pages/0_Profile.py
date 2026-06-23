@@ -64,7 +64,7 @@ with tab1:
 
     st.markdown("---")
     st.markdown("### Upload New Resume Version")
-    with st.form("upload_resume_form"):
+    with st.form("upload_resume_form", clear_on_submit=True):
         version_label = st.text_input("Version Label *", placeholder="e.g. Original, PM-focused, Security emphasis")
         uploaded_file = st.file_uploader("Resume file (PDF or .docx)", type=["pdf", "docx"])
         set_as_active = st.checkbox("Set as active resume", value=len(versions) == 0)
@@ -137,7 +137,7 @@ with tab2:
     st.markdown("---")
     st.markdown("### Add New Path")
 
-    with st.form("add_career_path"):
+    with st.form("add_career_path", clear_on_submit=True):
         path_type = st.radio("Path Type", ["Overarching Goal", "Sub Path"], horizontal=True)
         path_name = st.text_input("Path Name *", placeholder="e.g. Tech Leadership, APM Track, IT PM Now")
         path_target_role = st.text_input("Target Role *", placeholder="e.g. Senior Product Manager, Associate PM")
