@@ -3,22 +3,16 @@ from core.app_styles import apply_theme, show_help
 import json
 from core.database import get_jobs, get_profile, save_match_result, get_all_match_results, get_resume_versions, get_active_resume, delete_match_result, get_match_page_data
 from core.ai_engine import score_match, check_company_legitimacy
+from core.auth import require_login
 
 apply_theme()
 
 st.title("🎯 Match")
 st.subheader("Score your resume against any job description")
 
-if "tester_name" not in st.session_state or not st.session_state.tester_name:
-    params = st.query_params
-    if "tester" in params and params["tester"]:
-        st.session_state.tester_name = params["tester"]
-    else:
-        st.warning("Please start from the home page first.")
-        st.page_link("app.py", label="← Go to Home")
-        st.stop()
-
+require_login()
 tester_name = st.session_state.tester_name
+
 page_data = get_match_page_data(tester_name)
 profile = page_data["profile"]
 

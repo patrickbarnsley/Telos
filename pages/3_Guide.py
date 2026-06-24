@@ -3,22 +3,16 @@ from core.app_styles import apply_theme, show_help
 import json
 from core.database import get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress, save_critical_path, get_critical_path, get_career_paths, get_resume_versions, get_guide_data
 from core.ai_engine import generate_critical_path, chat_with_advisor
+from core.auth import require_login
 
 apply_theme()
 
 st.title("🗺️ Guide")
 st.subheader("Your career skill tree")
 
-if "tester_name" not in st.session_state or not st.session_state.tester_name:
-    params = st.query_params
-    if "tester" in params and params["tester"]:
-        st.session_state.tester_name = params["tester"]
-    else:
-        st.warning("Please start from the home page first.")
-        st.page_link("app.py", label="← Go to Home")
-        st.stop()
-
+require_login()
 tester_name = st.session_state.tester_name
+
 guide_data = get_guide_data(tester_name)
 profile = guide_data["profile"]
 

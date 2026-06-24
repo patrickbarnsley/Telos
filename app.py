@@ -1,6 +1,7 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
 from core.database import init_db
+from core.auth import sign_in, sign_up
 
 st.set_page_config(
     page_title="Telos",
@@ -16,82 +17,73 @@ def initialize_database():
 
 initialize_database()
 
+# --- Auth state ---
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
 if "tester_name" not in st.session_state:
     st.session_state.tester_name = ""
 
-if not st.session_state.tester_name:
-    params = st.query_params
-    if "tester" in params and params["tester"]:
-        st.session_state.tester_name = params["tester"]
-
-if not st.session_state.tester_name:
+# --- Login / sign-up gate ---
+if not st.session_state.user_email:
     st.markdown("## Welcome to Telos")
-    st.markdown("Enter your name to get started.")
-    name_input = st.text_input("Your name", placeholder="e.g. Sarah")
-    if st.button("Get Started"):
-        if name_input.strip():
-            st.session_state.tester_name = name_input.strip()
-            st.rerun()
-        else:
-            st.error("Please enter your name.")
+    st.markdown("Sign in or create an account to get started.")
+
+    tab_login, tab_signup = st.tabs(["Log in", "Sign up"])
+
+    with tab_login:
+        with st.form("login_form"):
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            if st.form_submit_button("Log in"):
+                if not email or not password:
+                    st.error("Enter your email and password.")
+                else:
+                    result = sign_in(email.strip(), password)
+                    if result["ok"]:
+                        st.session_state.user_email = result["user"].email
+                        st.session_state.tester_name = result["user"].email
+                        st.rerun()
+                    else:
+                        st.error(result["error"])
+
+    with tab_signup:
+        with st.form("signup_form"):
+            new_email = st.text_input("Email", key="su_email")
+            new_password = st.text_input("Password (at least 6 characters)", type="password", key="su_pw")
+            new_password2 = st.text_input("Confirm password", type="password", key="su_pw2")
+            if st.form_submit_button("Create account"):
+                if not new_email or not new_password:
+                    st.error("Enter an email and password.")
+                elif new_password != new_password2:
+                    st.error("Passwords don't match.")
+                elif len(new_password) < 6:
+                    st.error("Password must be at least 6 characters.")
+                else:
+                    result = sign_up(new_email.strip(), new_password)
+                    if result["ok"]:
+                        st.session_state.user_email = result["user"].email
+                        st.session_state.tester_name = result["user"].email
+                        st.success("Account created!")
+                        st.rerun()
+                    else:
+                        st.error(result["error"])
+
     st.stop()
 
-tester_param = st.session_state.tester_name
-
+# --- Logged-in home page ---
 st.markdown("""
 <style>
-.nav-card-link {
-    text-decoration: none;
-    display: block;
-}
-.nav-card {
-    background-color: #0F1117;
-    border: 2px solid #C9A84C;
-    border-radius: 12px;
-    padding: 40px 24px;
-    text-align: center;
-    transition: all 0.2s ease;
-    cursor: pointer;
-    min-height: 240px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-.nav-card:hover {
-    box-shadow: 0 0 28px rgba(201, 168, 76, 0.25);
-    transform: translateY(-3px);
-    background-color: #1A1D27;
-}
-.nav-card .icon {
-    font-size: 56px;
-    margin-bottom: 16px;
-    display: block;
-}
-.nav-card .title {
-    color: #C9A84C;
-    font-size: 22px;
-    font-weight: 700;
-    margin-bottom: 10px;
-}
-.nav-card .desc {
-    color: #A0A7B8;
-    font-size: 13px;
-    line-height: 1.5;
-}
 .hero-title {
     font-size: 52px;
     font-weight: 700;
     color: #FFFFFF;
     margin-bottom: 4px;
 }
-.hero-accent {
-    color: #C9A84C;
-}
+.hero-accent { color: #C9A84C; }
 .hero-sub {
     font-size: 18px;
     color: #A0A7B8;
-    margin-bottom: 48px;
+    margin-bottom: 24px;
 }
 .footer {
     color: #A0A7B8;
@@ -102,54 +94,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+top_l, top_r = st.columns([5, 1])
+with top_r:
+    if st.button("Log out"):
+        st.session_state.user_email = ""
+        st.session_state.tester_name = ""
+        st.rerun()
+
 st.markdown('<div class="hero-title">🎯 <span class="hero-accent">Telos</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">Your career campaign, organized.</div>', unsafe_allow_html=True)
+st.caption(f"Signed in as {st.session_state.user_email}")
 
-col1, col2, col3, col4 = st.columns(4)
+st.markdown("---")
+st.markdown("### Where to next?")
 
-with col1:
-    st.markdown(f"""
-    <a href="/Profile?tester={tester_param}" target="_self" class="nav-card-link">
-        <div class="nav-card">
-            <span class="icon">👤</span>
-            <div class="title">Profile</div>
-            <div class="desc">Upload your resume and set your target role</div>
-        </div>
-    </a>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown(f"""
-    <a href="/Track?tester={tester_param}" target="_self" class="nav-card-link">
-        <div class="nav-card">
-            <span class="icon">☑️</span>
-            <div class="title">Track</div>
-            <div class="desc">Log every job and manage your pipeline</div>
-        </div>
-    </a>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown(f"""
-    <a href="/Match?tester={tester_param}" target="_self" class="nav-card-link">
-        <div class="nav-card">
-            <span class="icon">🎯</span>
-            <div class="title">Match</div>
-            <div class="desc">Score your resume against any job description</div>
-        </div>
-    </a>
-    """, unsafe_allow_html=True)
-
-with col4:
-    st.markdown(f"""
-    <a href="/Guide?tester={tester_param}" target="_self" class="nav-card-link">
-        <div class="nav-card">
-            <span class="icon">🗺️</span>
-            <div class="title">Guide</div>
-            <div class="desc">Get your AI-powered critical path to your goal</div>
-        </div>
-    </a>
-    """, unsafe_allow_html=True)
+st.page_link("pages/0_Profile.py", label="👤  Profile — Upload your resume and set your target role")
+st.page_link("pages/1_Track.py", label="☑️  Track — Log every job and manage your pipeline")
+st.page_link("pages/2_Match.py", label="🎯  Match — Score your resume against any job description")
+st.page_link("pages/3_Guide.py", label="🗺️  Guide — Get your AI-powered critical path to your goal")
 
 st.markdown("---")
 st.markdown('<div class="footer">Telos — from the Greek for <em>ultimate purpose</em>. Built to help you find and reach yours.</div>', unsafe_allow_html=True)

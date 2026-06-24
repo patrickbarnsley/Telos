@@ -3,21 +3,14 @@ from core.app_styles import apply_theme, show_help
 from core.database import create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats, get_match_results
 from core.models import Job
 from core.ai_engine import extract_jd_from_image
+from core.auth import require_login
 
 apply_theme()
 
 st.title("📋 Track")
 st.subheader("Your job pipeline")
 
-if "tester_name" not in st.session_state or not st.session_state.tester_name:
-    params = st.query_params
-    if "tester" in params and params["tester"]:
-        st.session_state.tester_name = params["tester"]
-    else:
-        st.warning("Please start from the home page first.")
-        st.page_link("app.py", label="← Go to Home")
-        st.stop()
-
+require_login()
 tester_name = st.session_state.tester_name
 
 STATUSES = ["applied", "screening", "interview", "offer", "rejected", "withdrawn", "recruiter_outreach"]

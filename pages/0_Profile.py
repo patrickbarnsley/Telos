@@ -3,21 +3,14 @@ from core.app_styles import apply_theme, show_help
 from core.database import save_profile, get_profile, create_career_path, get_career_paths, delete_career_path, save_resume_version, get_resume_versions, set_active_resume, delete_resume_version, get_active_resume
 from core.models import Profile
 from core.ai_engine import extract_resume_text
+from core.auth import require_login
 
 apply_theme()
 
 st.title("👤 Profile")
 st.subheader("Your career profile")
 
-if "tester_name" not in st.session_state or not st.session_state.tester_name:
-    params = st.query_params
-    if "tester" in params and params["tester"]:
-        st.session_state.tester_name = params["tester"]
-    else:
-        st.warning("Please start from the home page first.")
-        st.page_link("app.py", label="← Go to Home")
-        st.stop()
-
+require_login()
 tester_name = st.session_state.tester_name
 
 tab1, tab2, tab3 = st.tabs(["Resumes", "Career Paths", "Legacy Profile"])
