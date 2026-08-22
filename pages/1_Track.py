@@ -4,6 +4,8 @@ from core.database import create_job, get_jobs, update_job, delete_job, get_care
 from core.models import Job
 from core.ai_engine import extract_jd_from_image
 from core.auth import require_login
+from core.demo import demo_banner
+from core.plans import quota_gate, record_usage, JD_EXTRACT
 
 apply_theme()
 
@@ -12,6 +14,7 @@ st.subheader("Your job pipeline")
 
 require_login()
 tester_name = st.session_state.tester_name
+demo_banner()
 
 STATUSES = ["applied", "screening", "interview", "offer", "rejected", "withdrawn", "recruiter_outreach"]
 OUTCOME_STATUSES = ["offer", "rejected"]
@@ -77,11 +80,13 @@ with tab1:
             type=["png", "jpg", "jpeg", "gif", "webp", "bmp", "tiff"],
             key="add_jd_shot"
         )
-        if shot is not None and st.button("📷 Extract text from screenshot", key="add_jd_extract"):
+        if (shot is not None and st.button("📷 Extract text from screenshot", key="add_jd_extract")
+                and quota_gate(tester_name, JD_EXTRACT)):
             extracted = None
             try:
                 with st.spinner("Reading the screenshot..."):
                     extracted = extract_jd_from_image(shot)
+                    record_usage(tester_name, JD_EXTRACT)
             except Exception as e:
                 st.error(f"Couldn't read that image: {e}")
             if extracted is not None:
@@ -242,7 +247,7 @@ with tab1:
                                 update_fields["outcome_date"] = str(e_outcome_date)
                             if e_predictive:
                                 update_fields["match_predictive"] = e_predictive
-                            update_job(job["id"], update_fields)
+                            update_job(job["id"], update_fields, tester_name)
                             st.success("Saved!")
                             st.rerun()
 
@@ -258,7 +263,7 @@ with tab1:
                     if job.get("match_predictive"):
                         st.markdown(f"**Predictive:** {job['match_predictive']}")
                     if st.button("🗑️ Delete", key=f"del_{job['id']}"):
-                        delete_job(job["id"])
+                        delete_job(job["id"], tester_name)
                         st.rerun()
 
 with tab2:

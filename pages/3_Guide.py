@@ -4,6 +4,8 @@ import json
 from core.database import get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress, save_critical_path, get_critical_path, get_career_paths, get_resume_versions, get_guide_data
 from core.ai_engine import generate_critical_path, chat_with_advisor
 from core.auth import require_login
+from core.demo import demo_banner
+from core.plans import quota_gate, record_usage, ROADMAP, ADVISOR
 
 apply_theme()
 
@@ -12,6 +14,7 @@ st.subheader("Your career skill tree")
 
 require_login()
 tester_name = st.session_state.tester_name
+demo_banner()
 
 guide_data = get_guide_data(tester_name)
 profile = guide_data["profile"]
@@ -76,7 +79,7 @@ with col1:
         st.markdown(f"_Last generated: {saved['generated_at']}_")
 
 with col2:
-    if st.button("🔄 Generate Critical Path", type="primary"):
+    if st.button("🔄 Generate Critical Path", type="primary") and quota_gate(tester_name, ROADMAP):
         with st.spinner("Building your critical path..."):
             try:
                 path_profile = {
@@ -87,6 +90,7 @@ with col2:
                     "resume_versions": [v["version_label"] for v in resume_versions]
                 }
                 new_path = generate_critical_path(path_profile, match_history)
+                record_usage(tester_name, ROADMAP)
                 save_critical_path(tester_name, new_path, selected_path_id)
                 st.session_state.chat_history[selected_path_id] = []
                 st.rerun()
@@ -162,7 +166,7 @@ if saved:
 
     user_input = st.chat_input("Ask anything about your career path...")
 
-    if user_input:
+    if user_input and quota_gate(tester_name, ADVISOR):
         st.session_state.chat_history[chat_key].append({"role": "user", "content": user_input})
 
         with st.chat_message("user"):
@@ -190,12 +194,14 @@ if saved:
                         conversation_history=api_history,
                         user_message=user_input
                     )
+                    record_usage(tester_name, ADVISOR)
                     st.markdown(response)
                     st.session_state.chat_history[chat_key].append({"role": "assistant", "content": response})
 
                     if any(phrase in user_input.lower() for phrase in ["update my roadmap", "update the roadmap", "regenerate", "update my critical path"]):
                         with st.spinner("Updating your roadmap..."):
                             new_path = generate_critical_path(path_context, match_history)
+                            record_usage(tester_name, ROADMAP)
                             save_critical_path(tester_name, new_path, selected_path_id)
                             st.success("Roadmap updated and saved.")
                             st.rerun()

@@ -4,6 +4,7 @@ from core.database import save_profile, get_profile, create_career_path, get_car
 from core.models import Profile
 from core.ai_engine import extract_resume_text
 from core.auth import require_login
+from core.demo import demo_banner
 
 apply_theme()
 
@@ -12,6 +13,7 @@ st.subheader("Your career profile")
 
 require_login()
 tester_name = st.session_state.tester_name
+demo_banner()
 
 tab1, tab2, tab3 = st.tabs(["Resumes", "Career Paths", "Legacy Profile"])
 
@@ -49,7 +51,7 @@ with tab1:
                             st.rerun()
                 with col2:
                     if st.button("🗑️ Delete", key=f"del_resume_{v['id']}"):
-                        delete_resume_version(v["id"])
+                        delete_resume_version(v["id"], tester_name)
                         st.success("Resume version deleted. Match history using this version is preserved.")
                         st.rerun()
     else:
@@ -107,7 +109,7 @@ with tab2:
                     for s in subs:
                         st.markdown(f"- {s['path_name']} → {s['target_role']}")
                 if st.button("🗑️ Delete", key=f"del_main_{path['id']}"):
-                    delete_career_path(path['id'])
+                    delete_career_path(path['id'], tester_name)
                     st.rerun()
 
     if sub_paths:
@@ -121,7 +123,7 @@ with tab2:
                     st.markdown(f"**Goals:** {path['goals']}")
                 st.markdown(f"**Created:** {path['created_at']}")
                 if st.button("🗑️ Delete", key=f"del_sub_{path['id']}"):
-                    delete_career_path(path['id'])
+                    delete_career_path(path['id'], tester_name)
                     st.rerun()
 
     if not career_paths:

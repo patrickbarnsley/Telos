@@ -1,428 +1,247 @@
-\# 🎯 Telos
+# Telos
 
+> *Telos is the Greek word for ultimate purpose. The app helps you find and reach yours.*
 
+**[usetelosapp.com](https://usetelosapp.com)** · **[Live demo — no signup](https://telos-career.streamlit.app/?demo=1)**
 
-> \*Telos is the Greek word for ultimate purpose. The app helps you find and reach yours.\*
+Telos is a career campaign system for job seekers. Track every application, score your
+resume against any job description with AI, and get a specific path to the role you
+actually want.
 
+---
 
+## Why I built this
 
-\*\*Live App:\*\* \[telos-career.streamlit.app](https://telos-career.streamlit.app)
+My wife went through a job transition and couldn't tell me which jobs had rejected her,
+where she stood with any of them, or whether she was making progress. She was losing
+confidence — not because she wasn't qualified, but because she had no system and no signal.
 
+Plenty of people manage complex projects and pipelines all day at work, then run the
+highest-stakes campaign of their life out of a spreadsheet and memory. Telos gives that
+search the same structure, clarity, and honest feedback you'd demand from any other
+serious project.
 
+I'm also the second user. Every product decision here was made against a search I was
+running myself.
 
-\---
+---
 
+## What it does
 
+### Track
+Log every job you're pursuing and move it through the pipeline — applied, screening,
+interview, offer, rejected, withdrawn. Notes, contacts, posted vs. requested salary, and
+the job description all live on the record. Funnel metrics update as you go.
 
-\## Why I Built This
+### Match
+Paste a job description and get scored against your active resume the way a real ATS
+scores you. See which requirements you explicitly meet, which you miss, and which
+certifications would close the gap. Telos also researches the employer and flags likely
+scams before you spend time on an application.
 
+### Guide
+Get an ordered critical path from where you are to your target role — milestones with
+timelines, concrete actions, and success criteria, built from your resume, your goals,
+and your actual match history. An advisor chat lets you drill into any part of it.
 
+---
 
-I built Telos because I found a fundamental flaw in the job market. Candidates have no real visibility into how well they match the jobs they're applying for, and career advisors rarely give honest, actionable guidance on how to close the gap.
+## Product decisions
 
+### The pivot: self-hosted → hosted
 
+**v1 shipped self-hosted.** Each user cloned the repo, brought their own Anthropic API
+key, and deployed their own instance. The reasoning was sound on paper: no auth to build,
+no central database, no infrastructure bill, and users owned their own data.
 
-The problem became personal when my wife went through a job transition. She was frustrated that she couldn't keep track of the jobs she'd applied to, where she stood with each one, or how well she was actually doing. She was losing confidence, not because she wasn't qualified, but because she had no system and no signal. She wanted to know which jobs had rejected her, how much progress she was making, and what she could do differently.
+**It was the wrong call, and the evidence was unambiguous.** Almost nobody who wanted to
+use Telos got as far as using it. "Create an Anthropic account, generate an API key, fork
+a repo, deploy it" is four steps of friction in front of a product whose value you can't
+see until step five. The people it was built for — job seekers, mid-search, already
+stressed — were exactly the people least willing to spend an evening on deployment.
 
+**So the model changed.** Telos is now hosted, with accounts, a shared database, and the
+AI cost absorbed on my side. Users sign up and it works.
 
+What I'd take from it: I optimised v1 for *my* costs — build time, infrastructure, API
+spend — and called it a user benefit. Data ownership was a real advantage, but it was
+solving a problem my users didn't have yet, at the price of the one they did.
 
-I built Telos to solve that. Many people are skilled at managing complex projects and pipelines in their professional lives, but few apply that same discipline to their own career. Telos gives job seekers the same clarity, structure, and AI-powered insight they would want in any other high-stakes campaign.
+### Why the free tier is metered rather than unlimited
 
+Every AI action has a marginal cost that I pay. An unlimited free tier on someone else's
+API key isn't generous, it's just undated. Metering it makes the economics honest and
+visible: tracking is unlimited because tracking is free to serve, and AI scoring is capped
+because it isn't.
 
+### Why the demo is read-only and pre-generated
 
-\---
+A hiring manager or a curious job seeker shouldn't have to create an account to find out
+what the product does. The demo account is fully populated with a fictional candidate's
+pipeline, real match output, and a real roadmap. It costs nothing to serve because the AI
+output is pre-generated and every write is blocked at the database layer, not at the
+button — a single choke point rather than trusting each UI path to check.
 
+### Why Match requires a linked job
 
+You see a job, you log it, then you score it. Enforcing that order means every match
+result is attached to a real job, the scam check always has a company to research, and
+match history stays clean enough to be worth analysing later.
 
-\## What Telos Does
-
-
-
-Telos is a self-hosted career campaign management app. Three pillars, each building on the last:
-
-
-
-\### 📋 Track
-
-Log every job you're pursuing. Track status across the full pipeline (applied, screening, interview, offer, rejected, withdrawn), add notes and contacts, and see your funnel metrics updated in real time: response rate, interview rate, and offer rate.
-
-
-
-\### 🎯 Match
-
-Paste any job description and get an AI-powered match score against your actual resume. See exactly which requirements you meet and which you're missing, get specific cert recommendations to close gaps, and get a recommended action list. Telos also researches the company in the background and flags potential scams before you invest time in an application.
-
-
-
-\### 🗺️ Guide
-
-Get a structured critical path from your current state to your target role. Telos analyzes your resume, your target role, your career goals, and your match history to build a specific set of ordered milestones with timelines, actions, and success criteria. An advisor chat lets you drill down on any part of the path.
-
-
-
-\---
-
-
-
-\## Security
-
-
-
-Security is built into the architecture of Telos from the ground up, not added as an afterthought.
-
-
-
-\### What is protected today
-
-
-
-\*\*Your data never leaves your deployment.\*\* Because Telos is self-hosted, your resume, job history, match results, and career goals are stored only in your own instance. There is no central server where your sensitive career information sits alongside other users' data. This is a stronger privacy model than most SaaS tools can offer.
-
-
-
-\*\*Your API key is never exposed.\*\* The Anthropic API key is stored in a local `.env` file that is permanently blocked from GitHub by `.gitignore`. In production on Streamlit Community Cloud, it is stored in an encrypted secrets manager and never appears in the codebase. No one can access your key from the repository.
-
-
-
-\*\*Your database is never committed.\*\* The SQLite database file that holds your jobs, resume, and match history is blocked from GitHub by `.gitignore`. It exists only on your local machine or your Streamlit Cloud deployment.
-
-
-
-\*\*HTTPS is enforced automatically.\*\* All traffic to your Streamlit Community Cloud deployment is encrypted in transit via HTTPS by default.
-
-
-
-\### Honest limitations
-
-
-
-Telos v1 is designed for personal use by a single user on their own deployment. With that context in mind, there are limitations worth knowing:
-
-
-
-\- The app has no login or authentication system. Anyone who has your deployment URL can access it. Keep your URL private or use Streamlit's built-in sharing controls to restrict access.
-
-\- The SQLite database is not encrypted at rest. If someone has physical access to the machine running your instance, the database file is readable.
-
-\- There is no rate limiting on AI calls. Your Anthropic API usage is governed by your own account limits.
-
-
-
-\### Security roadmap for v2
-
-
-
-When Telos transitions to a centralized SaaS model, the following will be added:
-
-
-
-\- Full user authentication (login, password, session management)
-
-\- Encrypted database at rest
-
-\- Rate limiting on all AI calls
-
-\- Role-based access controls
-
-\- Security audit before public launch
-
-
-
-\---
-
-
-
-\## Product Decisions
-
-
-
-\### Why self-hosted?
-
-
-
-Telos v1 is designed as a self-hosted open source app. Each user deploys their own instance rather than sharing a central platform. This was a deliberate decision for several reasons.
-
-
-
-Speed to ship was the first one. Without an auth system, central database, or server to maintain, I could build a working product in weeks instead of months. Cost was the second. It's free to run and free to use with no infrastructure bill. The third reason was about sequencing correctly: the right question for v1 is whether the product is actually useful, not whether it can handle 100,000 users. Build the SaaS when there's proof it's worth building. And finally, users own their own data. Their resume, job history, and match results are all stored locally in their own instance.
-
-
-
-The tradeoff is real. Users need their own Anthropic API key and need to deploy their own instance. That's friction. It's the right tradeoff for v1.
-
-
-
-\### Why build Track, then Match, then Guide?
-
-
-
-Each pillar depends on the one before it. Track had to exist first because Match needs a job to score against. Match had to exist before Guide because Guide uses match history to build a smarter critical path. The order isn't arbitrary; it's the dependency graph.
-
-
-
-Building sequentially also meant something useful shipped at every stage. Track is immediately valuable on day one before the AI features exist at all. If all three had been built simultaneously, nothing would have been usable for months.
-
-
-
-\### Why require a linked job before Match scoring?
-
-
-
-This was a deliberate workflow enforcement decision. The right sequence is to see a job, log it in Track, then score it in Match. Enforcing that order means every match result is tied to a real job in the tracker, the scam check always has a company name to research, and the match history stays clean and organized.
-
-
-
-\### What was cut and why
-
-
+### What was cut, and why
 
 | Feature | Decision | Reasoning |
+|---|---|---|
+| LinkedIn / Indeed scraping | Cut | Active bot detection, no public API, real legal risk. Naming the tradeoff is worth more than shipping a fragile scraper. |
+| Auto-apply | Cut permanently | Floods employers with low-quality applications and hurts the people using it. Telos makes each application better, not more numerous. |
+| Payments | Deferred | Pro is defined and priced, but takes a waitlist rather than a card. Wire Stripe when someone actually wants to pay, not before. |
+| Browser extension | Roadmap | Right feature, wrong time. |
+| AI resume tailoring | Roadmap | Natural next step once Match is validated. |
+| Bring your own AI key | Roadmap | The optional version of the thing that failed as a requirement. |
 
-|---------|----------|-----------|
+---
 
-| LinkedIn / Indeed scraping | Cut | Active bot detection, no public APIs, legal risk. Surfacing this tradeoff is more valuable than shipping a fragile scraper. |
+## Pricing
 
-| Multi-user architecture | Deferred to v2 | Not needed for the self-hosted model. Each instance serves one user. |
+| | Free | Pro — $9/mo |
+|---|---|---|
+| Job tracking | Unlimited | Unlimited |
+| Pipeline metrics | Unlimited | Unlimited |
+| AI match scores | 10 / month | 200 / month |
+| Career roadmaps | 1 / month | 10 / month |
+| Advisor chat | — | Unlimited |
+| Employer scam checks | 10 / month | 200 / month |
+| Outcome analytics | — | Included |
 
-| Payments / monetization | Deferred | Validate the product first. Charging adds legal, payment, and support complexity that doesn't serve v1 goals. |
+Pro is not taking payments yet. It exists as a defined tier with a waitlist so that
+demand can be measured before payment infrastructure is built.
 
-| Browser extension | Roadmap | Too complex for v1. Right feature, wrong time. |
+---
 
-| AI resume tailoring | Roadmap | Natural v2 feature once Match is validated. |
-
-| Community / messaging board | v3 | Requires centralized infrastructure that doesn't exist yet. |
-
-
-
-\---
-
-
-
-\## Architecture
-
-
+## Architecture
 
 ```
-
 telos/
-
-├── app.py                    # Landing page and navigation
-
+├── app.py                  # Landing, auth gate, demo entry, plan summary
 ├── pages/
-
-│   ├── 0\_Profile.py          # Resume upload and career goals
-
-│   ├── 1\_Track.py            # Job pipeline tracker
-
-│   ├── 2\_Match.py            # AI job description scoring
-
-│   └── 3\_Guide.py            # Critical path generator and advisor chat
-
+│   ├── 0_Profile.py        # Resume upload, versioning, career paths
+│   ├── 1_Track.py          # Job pipeline and funnel metrics
+│   ├── 2_Match.py          # ATS scoring and employer checks
+│   ├── 3_Guide.py          # Critical path and advisor chat
+│   └── 4_Admin.py          # Usage analytics and outcome correlation
 ├── core/
-
-│   ├── database.py           # All SQLite read/write in one place
-
-│   ├── ai\_engine.py          # Claude API wrapper (swappable)
-
-│   ├── models.py             # Data classes (Job, Profile)
-
-│   └── app\_styles.py         # Dark professional theme
-
-├── .env                      # API key, never committed
-
-├── .gitignore
-
-├── requirements.txt
-
-└── README.md
-
+│   ├── database.py         # All Postgres access; demo write-guard
+│   ├── ai_engine.py        # Claude API wrapper — the only Claude-aware file
+│   ├── auth.py             # Supabase email/password
+│   ├── plans.py            # Tiers, usage metering, quota enforcement
+│   ├── demo.py             # Read-only demo account and seed data
+│   ├── models.py           # Job, Profile
+│   └── app_styles.py       # Dark theme
+└── requirements.txt
 ```
 
-
-
-\### The AI Module Design
-
-
-
-`ai\_engine.py` is the only file that knows Claude exists. The rest of the app calls clean functions:
-
-
-
-```python
-
-from core.ai\_engine import score\_match, generate\_critical\_path, chat\_with\_advisor
-
-```
-
-
-
-`ai\_engine.py` handles prompt construction, API calls, response parsing, and error handling internally. The rest of the app never touches the Anthropic SDK directly. Swapping to a different AI provider in v2 is a one-file change. That was intentional from day one.
-
-
-
-\### Stack
-
-
+### Stack
 
 | Layer | Choice | Why |
-
-|-------|--------|-----|
-
-| UI + Backend | Streamlit (Python) | Fast to ship and immediately demoable |
-
-| Database | SQLite via `sqlite3` | Zero setup, file-based, sufficient for single-user |
-
-| AI | Anthropic Claude API | Isolated in `ai\_engine.py` and swappable |
-
-| Deployment | Streamlit Community Cloud | Free, GitHub-connected, shareable URL |
-
-
-
-\---
-
-
-
-\## Roadmap
-
-
-
-\### v2 — SaaS Transition
-
-\- FastAPI backend (Python)
-
-\- PostgreSQL database
-
-\- React frontend
-
-\- User authentication
-
-\- No API key required, AI costs absorbed by subscription
-
-\- Hosted at a custom domain
-
-
-
-\### v2 Features
-
-\- AI-powered resume tailoring per job description
-
-\- Browser extension to capture job listings from any page
-
-\- Application auto-fill
-
-\- Multi-resume support
-
-\- Bring your own AI provider
-
-
-
-\### v3 Features
-
-\- Community board to connect with people in your target roles
-
-\- Peer accountability groups
-
-\- Mentor matching
-
-\- Aggregated anonymized success path data by role and industry
-
-
-
-\---
-
-
-
-\## How to Deploy Your Own Telos
-
-
-
-\### Prerequisites
-
-\- Python 3.10+
-
-\- Git
-
-\- Anthropic API key (\[console.anthropic.com](https://console.anthropic.com))
-
-
-
-\### Local Setup
-
-
-
-```bash
-
-\# Clone the repo
-
-git clone https://github.com/patrickbarnsley/Telos
-
-cd Telos
-
-
-
-\# Create and activate virtual environment
-
-python -m venv venv
-
-venv\\Scripts\\activate  # Windows
-
-source venv/bin/activate  # Mac/Linux
-
-
-
-\# Install dependencies
-
-pip install -r requirements.txt
-
-
-
-\# Add your API key
-
-echo ANTHROPIC\_API\_KEY=your\_key\_here > .env
-
-
-
-\# Run the app
-
-streamlit run app.py
-
+|---|---|---|
+| UI + backend | Streamlit | Fast to ship, immediately demoable |
+| Database | Supabase PostgreSQL | Persistent across deployments; migrated off SQLite when the app went multi-user |
+| Auth | Supabase email/password | Managed sessions without building auth from scratch |
+| AI | Anthropic Claude API | Isolated in `ai_engine.py` and swappable |
+| Hosting | Streamlit Community Cloud | Free, GitHub-connected |
+
+### The AI module
+
+`ai_engine.py` is the only file that knows Claude exists. Everything else calls plain
+functions:
+
+```python
+from core.ai_engine import score_match, generate_critical_path, chat_with_advisor
 ```
 
+Prompt construction, API calls, response parsing, and error handling all live behind that
+boundary. Swapping providers is a one-file change. That was intentional from day one.
 
+### Data access
 
-\### Deploy to Streamlit Community Cloud (Free)
+Every read and write in `database.py` is scoped to its owner. A row ID alone is never
+sufficient to reach a row — `get_job(job_id, tester_name)`, not `get_job(job_id)` — so
+that the boundary holds when the data layer is eventually put behind an HTTP API.
 
+---
 
+## Security
 
-1\. Fork this repo to your GitHub account
+**What's protected today**
 
-2\. Go to \[share.streamlit.io](https://share.streamlit.io)
+- Authentication is handled by Supabase; passwords are never stored by this app.
+- Every query is parameterised. No string-interpolated SQL.
+- Every row-level read and write is scoped to the owning account.
+- API keys and the database URL live in Streamlit's encrypted secrets manager or a local
+  `.env`, never in the repository.
+- HTTPS is enforced by the host.
+- AI usage is metered per account, so a single user cannot run up an unbounded bill.
 
-3\. Connect your GitHub repo
+**Honest limitations**
 
-4\. Set Main file path to `app.py`
+- Data is not encrypted at rest beyond what the managed Postgres provider does by default.
+- There is no formal security audit. This is a solo project.
+- The demo account is shared by every anonymous visitor by design. Nothing in it is real.
 
-5\. Add `ANTHROPIC\_API\_KEY = "your\_key\_here"` in the Secrets section
+---
 
-6\. Deploy
+## Roadmap
 
+**Next** — payments for Pro once the waitlist justifies it; AI resume tailoring per job
+description; multi-resume comparison against a single posting.
 
+**Later** — a React + FastAPI rebuild on AWS (App Runner, Amplify, S3, Cognito, Bedrock),
+gated on the hosted version validating demand first. Building that infrastructure before
+the product earns it would be premature scaling, and the current stack has not yet become
+the constraint.
 
-Your personal Telos instance will be live at `your-app-name.streamlit.app`.
+**Someday** — browser extension for capturing listings; community and peer accountability;
+aggregated anonymised success-path data by role.
 
+---
 
+## Running it locally
 
-\---
+Requires Python 3.10+, a Postgres database, an Anthropic API key, and a Supabase project.
 
+```bash
+git clone https://github.com/patrickbarnsley/Telos
+cd Telos
 
+python -m venv venv
+venv\Scripts\activate          # Windows
+source venv/bin/activate       # macOS / Linux
 
-\## About
+pip install -r requirements.txt
+```
 
+Create a `.env` file:
 
+```
+ANTHROPIC_API_KEY=your_key_here
+DATABASE_URL=postgresql://user:password@host:5432/dbname
+SUPABASE_URL=https://yourproject.supabase.co
+SUPABASE_ANON_KEY=your_anon_key
+OWNER_EMAILS=you@example.com
+ADMIN_PASSWORD=choose_something
+```
 
-Built by \[Patrick Barnsley](https://linkedin.com/in/patrickbarnsley).
+```bash
+streamlit run app.py
+```
 
+Tables are created automatically on first run.
 
+---
 
-Telos exists because the job search process is broken for candidates. No signal, no structure, no honest feedback. It's built to change that.
+## About
 
+Built by [Patrick Barnsley](https://linkedin.com/in/patrickbarnsley).
+
+Telos exists because the job search is broken for candidates: no signal, no structure, no
+honest feedback. It's built to change that.

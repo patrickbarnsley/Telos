@@ -4,6 +4,8 @@ import json
 from core.database import get_jobs, get_profile, save_match_result, get_all_match_results, get_resume_versions, get_active_resume, delete_match_result, get_match_page_data
 from core.ai_engine import score_match, check_company_legitimacy
 from core.auth import require_login
+from core.demo import demo_banner
+from core.plans import quota_gate, quota_caption, record_usage, check_quota, MATCH, SCAM_CHECK
 
 apply_theme()
 
@@ -12,6 +14,7 @@ st.subheader("Score your resume against any job description")
 
 require_login()
 tester_name = st.session_state.tester_name
+demo_banner()
 
 page_data = get_match_page_data(tester_name)
 profile = page_data["profile"]
@@ -55,18 +58,25 @@ with st.form("match_form"):
         st.info("No resume versions found. Upload a resume in Profile first.")
 
     submitted = st.form_submit_button("Score My Match")
+    st.caption(quota_caption(tester_name, MATCH))
 
 if submitted:
     if not jd_text.strip():
         st.error("Please paste a job description.")
+    elif not quota_gate(tester_name, MATCH):
+        pass
     else:
         job_id = selected_job["id"]
         company = selected_job["company"]
         role = selected_job["role"]
 
+        scam_allowed, _scam_used, _scam_limit = check_quota(tester_name, SCAM_CHECK)
         with st.spinner("Checking company legitimacy..."):
             try:
+                if not scam_allowed:
+                    raise RuntimeError("monthly employer-check limit reached")
                 scam_result = check_company_legitimacy(company, jd_text)
+                record_usage(tester_name, SCAM_CHECK)
             except Exception as e:
                 scam_result = {
                     "verdict": "unknown",
@@ -115,6 +125,7 @@ if submitted:
                     job_description=jd_text,
                     target_role=profile["target_role"]
                 )
+                record_usage(tester_name, MATCH)
 
                 save_match_result(
                     score=result["overall_score"],
@@ -273,7 +284,7 @@ else:
                             st.markdown(f"- {action}")
 
                     if st.button("🗑️ Delete", key=f"del_match_{r['id']}"):
-                        delete_match_result(r["id"])
+                        delete_match_result(r["id"], tester_name)
                         st.rerun()
 
         st.session_state.compare_selected = selected_ids

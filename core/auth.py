@@ -72,9 +72,16 @@ def require_login():
     """Guard a page: stop and show a sign-in prompt unless the user is logged in.
     Call this near the top of every protected page."""
     import streamlit as st
+    from core.plans import DEMO_TESTER
+
     if not st.session_state.get("user_email"):
         st.warning("Please log in to use Telos.")
         st.page_link("app.py", label="→ Go to the login page")
         st.stop()
-    # Keep the identity key in sync for the rest of the page.
-    st.session_state.tester_name = st.session_state.user_email
+
+    # Keep the identity key in sync for the rest of the page — but never clobber
+    # the demo identity. The demo account is keyed on DEMO_TESTER, not on an
+    # email, and overwriting it here would drop demo visitors into an empty
+    # account with the demo write-guard disarmed.
+    if st.session_state.get("tester_name") != DEMO_TESTER:
+        st.session_state.tester_name = st.session_state.user_email

@@ -8,6 +8,51 @@ from core.models import Job, Profile
 
 load_dotenv()
 
+# --- Demo account write protection -------------------------------------------
+# The demo account is shared by every anonymous visitor, so a single stray write
+# would degrade it for everyone after. Rather than trusting each UI button to
+# check, every write goes through this one gate. Seeding temporarily lifts it.
+DEMO_TESTER = "__demo__"
+_ALLOW_DEMO_WRITES = False
+
+
+class demo_seeding:
+    """Context manager that permits writes to the demo account (seeding only)."""
+    def __enter__(self):
+        global _ALLOW_DEMO_WRITES
+        _ALLOW_DEMO_WRITES = True
+        return self
+
+    def __exit__(self, *exc):
+        global _ALLOW_DEMO_WRITES
+        _ALLOW_DEMO_WRITES = False
+        return False
+
+
+def _demo_readonly(tester_name) -> bool:
+    return tester_name == DEMO_TESTER and not _ALLOW_DEMO_WRITES
+
+
+def _guard_write(returns=None):
+    """Decorator: no-op a write when it targets the locked demo account."""
+    import functools
+
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            tester = kwargs.get("tester_name")
+            if tester is None:
+                for a in args:
+                    if isinstance(a, str) and a == DEMO_TESTER:
+                        tester = a
+                        break
+            if _demo_readonly(tester):
+                return returns
+            return fn(*args, **kwargs)
+        return wrapper
+    return deco
+
+
 def get_db_url():
     try:
         import streamlit as st
@@ -123,6 +168,33 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_plans (
+            tester_name TEXT PRIMARY KEY,
+            plan TEXT NOT NULL DEFAULT 'free',
+            updated_at TIMESTAMPTZ
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS usage_events (
+            id SERIAL PRIMARY KEY,
+            tester_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_usage_lookup ON usage_events (tester_name, action, created_at)")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS waitlist (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            note TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+
     # --- Salary split migration (idempotent; safe to run on every startup) ---
     # Adds posted/requested salary columns to existing jobs tables without
     # touching data. CREATE TABLE IF NOT EXISTS won't alter an existing table,
@@ -143,6 +215,7 @@ def init_db():
     cursor.close()
     conn.close()
 
+@_guard_write(returns=-1)
 def create_job(job: Job, tester_name: str) -> int:
     conn = get_connection()
     cursor = conn.cursor()
@@ -176,35 +249,40 @@ def get_jobs(tester_name: str) -> list:
     conn.close()
     return [dict(row) for row in rows]
 
-def get_job(job_id: int) -> Optional[dict]:
+def get_job(job_id: int, tester_name: str) -> Optional[dict]:
+    """Owner-scoped by design: a row id alone must never be enough to read a row."""
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cursor.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
+    cursor.execute("SELECT * FROM jobs WHERE id = %s AND tester_name = %s", (job_id, tester_name))
     row = cursor.fetchone()
     cursor.close()
     conn.close()
     return dict(row) if row else None
 
-def update_job(job_id: int, fields: dict):
+@_guard_write(returns=None)
+def update_job(job_id: int, fields: dict, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
     set_clause = ", ".join([f"{k} = %s" for k in fields])
     set_clause += ", date_updated = CURRENT_DATE::text"
     values = list(fields.values())
     values.append(job_id)
-    cursor.execute(f"UPDATE jobs SET {set_clause} WHERE id = %s", values)
+    values.append(tester_name)
+    cursor.execute(f"UPDATE jobs SET {set_clause} WHERE id = %s AND tester_name = %s", values)
     conn.commit()
     cursor.close()
     conn.close()
 
-def delete_job(job_id: int):
+@_guard_write(returns=None)
+def delete_job(job_id: int, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM jobs WHERE id = %s", (job_id,))
+    cursor.execute("DELETE FROM jobs WHERE id = %s AND tester_name = %s", (job_id, tester_name))
     conn.commit()
     cursor.close()
     conn.close()
 
+@_guard_write(returns=None)
 def save_profile(profile: Profile, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
@@ -226,6 +304,7 @@ def get_profile(tester_name: str) -> Optional[dict]:
     conn.close()
     return dict(row) if row else None
 
+@_guard_write(returns=-1)
 def save_resume_version(tester_name: str, version_label: str, resume_text: str, resume_filename: str, set_active: bool = False) -> int:
     conn = get_connection()
     cursor = conn.cursor()
@@ -251,6 +330,7 @@ def get_resume_versions(tester_name: str) -> list:
     conn.close()
     return [dict(row) for row in rows]
 
+@_guard_write(returns=None)
 def set_active_resume(tester_name: str, version_id: int):
     conn = get_connection()
     cursor = conn.cursor()
@@ -260,10 +340,11 @@ def set_active_resume(tester_name: str, version_id: int):
     cursor.close()
     conn.close()
 
-def delete_resume_version(version_id: int):
+@_guard_write(returns=None)
+def delete_resume_version(version_id: int, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE resume_versions SET deleted_at = CURRENT_DATE::text, is_active = 0 WHERE id = %s", (version_id,))
+    cursor.execute("UPDATE resume_versions SET deleted_at = CURRENT_DATE::text, is_active = 0 WHERE id = %s AND tester_name = %s", (version_id, tester_name))
     conn.commit()
     cursor.close()
     conn.close()
@@ -277,6 +358,7 @@ def get_active_resume(tester_name: str) -> Optional[dict]:
     conn.close()
     return dict(row) if row else None
 
+@_guard_write(returns=None)
 def save_match_result(score, summary, matched, missing, certs, actions, jd_text, tester_name: str, job_id=None, company=None, role=None, resume_version_id=None, resume_version_label=None, resume_snapshot=None):
     conn = get_connection()
     cursor = conn.cursor()
@@ -300,19 +382,20 @@ def get_all_match_results(tester_name: str) -> list:
     conn.close()
     return [dict(row) for row in rows]
 
-def get_match_results(job_id: int) -> list:
+def get_match_results(job_id: int, tester_name: str) -> list:
     conn = get_connection()
     cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cursor.execute("SELECT * FROM match_results WHERE job_id = %s ORDER BY scored_at DESC", (job_id,))
+    cursor.execute("SELECT * FROM match_results WHERE job_id = %s AND tester_name = %s ORDER BY scored_at DESC", (job_id, tester_name))
     rows = cursor.fetchall()
     cursor.close()
     conn.close()
     return [dict(row) for row in rows]
 
-def delete_match_result(match_id: int):
+@_guard_write(returns=None)
+def delete_match_result(match_id: int, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM match_results WHERE id = %s", (match_id,))
+    cursor.execute("DELETE FROM match_results WHERE id = %s AND tester_name = %s", (match_id, tester_name))
     conn.commit()
     cursor.close()
     conn.close()
@@ -339,6 +422,7 @@ def get_company_stats(tester_name: str) -> list:
     conn.close()
     return [dict(row) for row in rows]
 
+@_guard_write(returns=None)
 def save_milestone_progress(tester_name: str, milestone_order: int, milestone_title: str, completed: bool, career_path_id: int = None):
     conn = get_connection()
     cursor = conn.cursor()
@@ -360,6 +444,7 @@ def get_milestone_progress(tester_name: str, career_path_id: int = None) -> dict
     conn.close()
     return {row["milestone_order"]: bool(row["completed"]) for row in rows}
 
+@_guard_write(returns=None)
 def save_critical_path(tester_name: str, path: dict, career_path_id: int = None):
     conn = get_connection()
     cursor = conn.cursor()
@@ -383,6 +468,7 @@ def get_critical_path(tester_name: str, career_path_id: int = None) -> Optional[
         return {"path": json.loads(row["path_json"]), "generated_at": row["generated_at"]}
     return None
 
+@_guard_write(returns=-1)
 def create_career_path(tester_name: str, path_name: str, target_role: str, path_type: str = 'sub', goals: str = None, parent_path_id: int = None) -> int:
     conn = get_connection()
     cursor = conn.cursor()
@@ -406,10 +492,11 @@ def get_career_paths(tester_name: str) -> list:
     conn.close()
     return [dict(row) for row in rows]
 
-def delete_career_path(path_id: int):
+@_guard_write(returns=None)
+def delete_career_path(path_id: int, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM career_paths WHERE id = %s", (path_id,))
+    cursor.execute("DELETE FROM career_paths WHERE id = %s AND tester_name = %s", (path_id, tester_name))
     conn.commit()
     cursor.close()
     conn.close()
