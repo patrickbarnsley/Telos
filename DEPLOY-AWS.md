@@ -1,231 +1,141 @@
 # Telos on AWS
 
-ECS Fargate behind an Application Load Balancer, plus the landing page on
-S3 + CloudFront. No GitHub anywhere in the deployment path.
+One Graviton EC2 instance running Docker and Caddy, plus the landing page on
+S3 + CloudFront. No GitHub in the deployment path, and no SSH.
+
+Full step-by-step walkthrough: see the launch runbook.
 
 ---
 
-## Why not App Runner
-
-Your Phase 2 plan named App Runner. It doesn't work for this app.
-
-Streamlit talks to the browser over a WebSocket — the page loads, then opens
-`/_stcore/stream` and does everything through it. **App Runner does not proxy
-WebSockets.** The container starts, health checks pass, and the app sits on a
-loading spinner forever. This is a known limitation people hit repeatedly.
-
-An Application Load Balancer handles the `Upgrade: websocket` handshake
-correctly, so the architecture is ECS Fargate behind an ALB.
-
-This is worth keeping as an interview answer. "I planned App Runner, found it
-couldn't carry the protocol my framework depends on, and moved to Fargate behind
-an ALB" is a better technical-fluency signal than having picked the right thing
-by luck.
-
----
-
-## What gets built
+## Architecture
 
 ```
-                    Route 53  (usetelosapp.com)
-                         |
-        +----------------+------------------+
-        |                                   |
-  CloudFront + ACM                   ALB + ACM  :443
-        |                                   |
-   S3 (private, OAC)              ECS Fargate task
-   landing page                    Telos container :8501
-                                          |
-                            Supabase Postgres + Anthropic API
+                 Route 53  (usetelosapp.com)
+                       |
+        +--------------+----------------+
+        |                               |
+  CloudFront + ACM              Elastic IP -> EC2 t4g.small
+        |                               |
+   S3 (private, OAC)            Caddy :443  (auto TLS, WebSockets)
+   landing page                        |
+                                  Telos container :8501
+                                        |
+                          Supabase Postgres + Anthropic API
 ```
-
-Three CloudFormation stacks:
 
 | Stack | Template | Contains |
 |---|---|---|
 | `telos-dns` | `infra/telos-dns.yaml` | Route 53 hosted zone |
-| `telos-site` | `infra/telos-site.yaml` | S3, CloudFront, OAC, ACM, DNS records |
-| `telos-app` | `infra/telos-app.yaml` | VPC, subnets, ALB, target group, ECS cluster, Fargate service, IAM roles, ACM, DNS record, logs |
-
-Secrets live in SSM Parameter Store as SecureString and are injected as
-environment variables at task start. Nothing sensitive is in the image.
+| `telos-site` | `infra/telos-site.yaml` | S3, CloudFront, OAC, ACM, DNS |
+| `telos-app` | `infra/telos-app.yaml` | VPC, EC2, Elastic IP, IAM, deploy bucket, DNS |
 
 ---
 
-## Prerequisites
+## Two architectures that were rejected, and why
 
-- AWS account with billing enabled
-- AWS CLI v2, authenticated (`aws sts get-caller-identity` should return your account)
-- Docker Desktop running
-- Control of DNS for `usetelosapp.com` at your registrar
+**App Runner.** Streamlit drives its UI over a WebSocket. App Runner does not
+proxy WebSockets — the container passes health checks and the browser hangs on a
+loading spinner permanently. Caddy handles the upgrade natively.
 
-Deploy everything in **us-east-1**. CloudFront only accepts certificates issued
-there, and keeping one region avoids a class of confusing errors.
+**ECS Fargate behind an ALB.** Built, tested, and costed at **$47.65/month**, of
+which the load balancer and its two public IPv4 addresses were $24.73 — over
+half the bill, to balance a single container. The template is kept at
+`infra/reference/telos-app-fargate.yaml` with the conditions that would justify
+returning to it: more than one task, zero-downtime deploys, or a single reboot
+becoming an unacceptable outage.
+
+---
+
+## What it costs
+
+| Item | Per month |
+|---|---|
+| EC2 t4g.small (2 vCPU / 2 GB, Graviton) | $12.26 |
+| EBS 20 GB gp3 | $1.60 |
+| Public IPv4 address | $3.65 |
+| Route 53 hosted zone + queries | $0.60 |
+| S3 + CloudFront (landing page) | $0.05 |
+| ACM / Let's Encrypt certificates | $0.00 |
+| **Total** | **$18.16** |
+
+Against the Fargate build at $47.65, that saves **$29.49/month — $354/year.**
+
+Note the public IPv4 charge: AWS bills $0.005/hour for every public IPv4
+address, attached or idle. One address is unavoidable for a public app. The
+Fargate stack needed three.
+
+Anthropic API usage is billed separately and scales with real users. The
+per-account quotas in `core/plans.py` bound it.
 
 ---
 
 ## Steps
 
-All commands run from the repo root.
-
-### 1. Hosted zone
-
 ```powershell
-.\deploy\deploy.ps1 -Step dns
-```
-
-Prints four nameservers. **Set them at your registrar, then wait.** Verify with:
-
-```powershell
-nslookup -type=NS usetelosapp.com
-```
-
-Do not move on until that returns AWS nameservers. Both remaining stacks request
-DNS-validated certificates; if the zone isn't authoritative yet, CloudFormation
-sits in `CREATE_IN_PROGRESS` and eventually fails. Propagation is usually under
-an hour but the TTL on your old records governs it.
-
-### 2. Secrets
-
-```powershell
-.\deploy\deploy.ps1 -Step secrets
-```
-
-Prompts for six values, masked. Press Enter to keep an existing value.
-
-`OWNER_EMAILS` is your own address — it gives your account unmetered AI usage.
-Without it you get the Free plan's 10 match scores a month like everyone else.
-
-### 3. Landing page
-
-```powershell
-.\deploy\deploy.ps1 -Step site
-```
-
-Creates the bucket and distribution, uploads `telos-site/index.html`, invalidates
-the cache. First run takes 10-20 minutes, mostly certificate validation and
-CloudFront propagation.
-
-### 4. Application
-
-```powershell
-.\deploy\deploy.ps1 -Step app
-```
-
-Builds the image for `linux/amd64`, pushes to ECR, deploys the stack. 10-15
-minutes on first run.
-
-### 5. Check it
-
-```powershell
+.\deploy\deploy.ps1 -Step dns        # then set nameservers at your registrar, WAIT
+.\deploy\deploy.ps1 -Step secrets    # six values into SSM Parameter Store
+.\deploy\deploy.ps1 -Step site       # landing page
+.\deploy\deploy.ps1 -Step app        # instance + first code deploy
 .\deploy\deploy.ps1 -Step status
 ```
 
-Then open `https://app.usetelosapp.com/?demo=1` and click through as if you were
-a hiring manager.
+Docker is **not** required on your machine. The image is built on the instance,
+natively for ARM, so there is no cross-compilation and no ECR.
 
----
+Deploy everything in **us-east-1** — CloudFront only accepts certificates issued
+there.
 
-## Routine releases
-
-After the first deploy, shipping a change is one command:
+### Shipping a change
 
 ```powershell
 .\deploy\deploy.ps1 -Step release
 ```
 
-Builds, pushes a timestamped tag, and rolls the service. The deployment circuit
-breaker is enabled, so a broken image rolls back automatically instead of taking
-the site down.
-
----
-
-## What this costs
-
-Realistic monthly estimate, us-east-1, low traffic:
-
-| Item | Cost |
-|---|---|
-| Application Load Balancer | ~$17 |
-| Fargate task, 0.5 vCPU / 1 GB, always on | ~$18 |
-| Route 53 hosted zone + queries | ~$1 |
-| CloudWatch Logs (30-day retention) | ~$0.50 |
-| ECR storage | ~$0.10 |
-| S3 + CloudFront at low traffic | ~$0-1 |
-| ACM certificates | free |
-| **Total** | **~$37-40/month** |
-
-Compare: Railway or Render runs the same container for $5-7/month, and Streamlit
-Community Cloud is free. You're paying roughly $35/month over the cheapest
-working option, and about $30/month over Railway, for the AWS line on your
-resume and the architecture experience behind it. That may well be worth it —
-it's a training and credibility budget, not an infrastructure bill — but it
-should be a number you chose rather than one you discovered.
-
-**Ways to cut it:**
-
-- **Fargate Spot** saves roughly 70% of the $18 compute. The tradeoff is that
-  AWS can reclaim the task with two minutes' notice, which drops live sessions.
-  Fine for a portfolio app, not for paying users.
-- **Drop to 0.25 vCPU / 0.5 GB** saves about $9. I'd advise against it —
-  pandas, pdfplumber and Pillow in one container will sit close to 512 MB, and
-  an OOM-killed task looks exactly like a broken app.
-- The ALB is not removable. Nothing cheaper on AWS terminates TLS, serves a
-  custom domain, and proxies WebSockets.
-
-**Set a billing alarm before you walk away from this.** Billing → Budgets, a
-$60/month threshold with an email alert. Ten minutes, and it's the difference
-between noticing a mistake in a day versus in a month.
+Zips the source, uploads it to a private S3 bucket, and triggers a rebuild on the
+instance through SSM Run Command. No SSH, no registry.
 
 ---
 
 ## Operating it
 
 ```powershell
-# Live logs
-aws logs tail /ecs/telos-app --follow --region us-east-1
-
-# Service state and recent events
-.\deploy\deploy.ps1 -Step status
-
-# Tear it all down (S3 bucket is retained deliberately)
-.\deploy\deploy.ps1 -Step destroy
+.\deploy\deploy.ps1 -Step logs      # recent application logs
+.\deploy\deploy.ps1 -Step status    # instance and container state
+.\deploy\deploy.ps1 -Step destroy   # tear down (S3 buckets retained)
 ```
 
-### If something breaks
+Shell access, without SSH or a key pair:
 
-**Task starts then stops repeatedly** — almost always a missing SSM parameter.
-Re-run `-Step secrets` and check the log group.
+```powershell
+aws ssm start-session --target <instance-id> --region us-east-1
+```
 
-**502 from the ALB** — the container isn't answering on 8501 yet. Check whether
-the target group shows healthy targets; the grace period is 90 seconds.
+Port 22 is never opened. There is no key pair to lose.
 
-**App loads but shows "Connecting..." forever** — the WebSocket isn't getting
-through. On this stack it should; if you ever move to a proxy in front of the
-ALB, that proxy must forward `Upgrade` and `Connection` headers.
+### What the instance does on its own
 
-**Certificate stack stuck** — nameservers aren't live. Confirm with `nslookup`
-before redeploying.
+- **Rebuilds on reboot** — a systemd unit brings the compose stack back up.
+- **Patches itself** — `dnf-automatic` applies security updates.
+- **Keeps Supabase awake** — a daily timer runs one trivial query. Supabase
+  pauses Free-plan projects after 7 days of low activity, which would otherwise
+  leave a visitor looking at a database error during a quiet week.
+- **Rotates logs** — container logs capped at 10 MB x 3 files.
 
 ---
 
 ## Honest caveats
 
-- **I could not test the AWS deploy end to end.** My sandbox has no route to
-  AWS, no container registry, and no PowerShell. The templates pass `cfn-lint`
-  clean and the Dockerfile's runtime behaviour is verified — the app serves,
-  `/_stcore/health` returns 200, and the WebSocket upgrade returns
-  `101 Switching Protocols`. The image build itself and the PowerShell script
-  have not been executed. Expect to hit one or two small things on the first
-  run; that's normal for a first infrastructure deploy and the errors are
-  usually legible.
-- **The database stays on Supabase.** Moving to RDS adds ~$15/month minimum and
-  a migration risk for no user-visible gain. "Postgres on Supabase, app on AWS"
-  is a perfectly defensible architecture — and being able to explain *why* you
-  didn't move it is a better answer than having moved it reflexively.
-- **Cognito isn't here either.** Supabase auth works today. Swapping auth
-  providers is real migration work with zero user benefit. Do it if you want the
-  Cognito line specifically, not because the diagram looks tidier.
-- **One task means brief downtime on deploy.** The rolling update starts a new
-  task before draining the old one, but Streamlit session state lives in the
-  process, so anyone mid-session gets reconnected.
+- **The AWS deploy has not been run end to end.** My sandbox has no route to AWS,
+  no container registry, and no PowerShell. Verified: all templates pass
+  `cfn-lint` clean; the app serves, `/_stcore/health` returns 200, and the
+  WebSocket upgrade returns `101 Switching Protocols`. Not verified: the image
+  build, the PowerShell script, and the deploy itself.
+- **One instance means one point of failure.** A reboot is roughly a minute of
+  downtime, and a bad deploy has no automatic rollback — though `docker compose`
+  makes reverting easy. For a portfolio app this is the right trade.
+- **Database and auth stay on Supabase.** RDS would roughly double the bill and
+  Cognito replaces working auth with migration work. Being able to explain why
+  you didn't move them is a better interview answer than having moved them.
+- **This host carries forward.** When the React + FastAPI rebuild happens, the
+  same instance and the same Caddy serve it — static frontend plus a proxied
+  API on the same box. None of this is throwaway.

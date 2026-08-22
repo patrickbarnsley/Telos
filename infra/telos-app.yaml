@@ -1,14 +1,19 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Telos application — ECS Fargate behind an Application Load Balancer.
+  Telos application — a single Graviton EC2 instance running Docker, with Caddy
+  terminating TLS and proxying WebSockets.
 
-  Why ALB and not App Runner: Streamlit talks to the browser over a WebSocket.
-  App Runner does not proxy WebSockets, so the app loads a spinner and never
-  connects. An ALB handles the Upgrade handshake correctly, which is the
-  deciding constraint for this architecture.
+  Why not ECS Fargate behind an ALB: that stack was built, measured, and costed
+  at ~$36.70/month, of which the load balancer alone was $17.43 — 47% of the
+  bill to balance a single container. This is ~$14.46/month for more RAM. The
+  Fargate version is kept at infra/reference/telos-app-fargate.yaml along with
+  the conditions that would justify going back to it.
 
-  Deploy in us-east-1 so the certificate and Route 53 records sit alongside the
-  landing-page stack.
+  Why not App Runner: Streamlit runs its UI over a WebSocket and App Runner does
+  not proxy WebSockets. Caddy does, natively.
+
+  There is no SSH here. Access is via SSM Session Manager and deploys go through
+  SSM Run Command, so no key pair exists and port 22 is never opened.
 
 Parameters:
   DomainName:
@@ -17,33 +22,26 @@ Parameters:
   AppSubdomain:
     Type: String
     Default: app
-    Description: Host label for the app. "app" produces app.usetelosapp.com.
   HostedZoneId:
     Type: String
     Description: From the telos-dns stack output.
-  ImageUri:
+  InstanceType:
     Type: String
-    Description: Full ECR image URI including tag, e.g. 1234.dkr.ecr.us-east-1.amazonaws.com/telos:v1
-  ContainerCpu:
-    Type: String
-    Default: '512'
-    AllowedValues: ['256', '512', '1024', '2048']
-  ContainerMemory:
-    Type: String
-    Default: '1024'
-    AllowedValues: ['512', '1024', '2048', '4096']
-  DesiredCount:
-    Type: Number
-    Default: 1
-    MinValue: 1
-    MaxValue: 4
+    Default: t4g.small
+    AllowedValues: [t4g.micro, t4g.small, t4g.medium]
     Description: >
-      Streamlit keeps per-session state in the server process. Sticky sessions
-      are enabled on the target group, but a task replacement still drops
-      in-flight sessions. Leave at 1 unless you have a reason.
-  LogRetentionDays:
+      t4g.small is 2 vCPU / 2 GB on Graviton — more memory than the Fargate task
+      it replaces, for less money. t4g.micro (1 GB) will OOM once pandas,
+      pdfplumber and Pillow are all resident.
+  VolumeSizeGb:
     Type: Number
-    Default: 30
+    Default: 20
+    MinValue: 8
+    MaxValue: 100
+  LatestAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
+    Description: Resolved at deploy time — never a hardcoded AMI id.
 
 Resources:
 
@@ -67,29 +65,20 @@ Resources:
       VpcId: !Ref Vpc
       InternetGatewayId: !Ref InternetGateway
 
-  PublicSubnetA:
+  PublicSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref Vpc
       CidrBlock: 10.42.1.0/24
       AvailabilityZone: !Select [0, !GetAZs '']
       MapPublicIpOnLaunch: true
-      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-public-a' }]
-
-  PublicSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref Vpc
-      CidrBlock: 10.42.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-      MapPublicIpOnLaunch: true
-      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-public-b' }]
+      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-public' }]
 
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref Vpc
-      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-public-rt' }]
+      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-rt' }]
 
   PublicRoute:
     Type: AWS::EC2::Route
@@ -99,283 +88,301 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
 
-  SubnetARouteAssoc:
+  SubnetRouteAssoc:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnetA
+      SubnetId: !Ref PublicSubnet
       RouteTableId: !Ref PublicRouteTable
 
-  SubnetBRouteAssoc:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref PublicSubnetB
-      RouteTableId: !Ref PublicRouteTable
-
-  # ---------------------------------------------------------- security groups
-  AlbSecurityGroup:
+  InstanceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Public HTTP/HTTPS ingress to the load balancer
+      GroupDescription: Public web traffic only. No SSH; access is via SSM Session Manager.
       VpcId: !Ref Vpc
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-          Description: HTTP, redirected to HTTPS
+          Description: HTTP for the HTTPS redirect and ACME challenges
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
           CidrIp: 0.0.0.0/0
           Description: HTTPS
-      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-alb-sg' }]
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+          Description: Outbound to Supabase, Anthropic, SSM, ACME and package repos
+      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-sg' }]
 
-  ServiceSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  # -------------------------------------------------------------- deploy bucket
+  DeployBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
-      GroupDescription: Container port, reachable only from the load balancer
-      VpcId: !Ref Vpc
-      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-svc-sg' }]
-
-  ServiceIngressFromAlb:
-    Type: AWS::EC2::SecurityGroupIngress
-    Properties:
-      GroupId: !Ref ServiceSecurityGroup
-      IpProtocol: tcp
-      FromPort: 8501
-      ToPort: 8501
-      SourceSecurityGroupId: !Ref AlbSecurityGroup
-      Description: Streamlit port from the ALB only
-
-  # ------------------------------------------------------------- certificate
-  Certificate:
-    Type: AWS::CertificateManager::Certificate
-    Properties:
-      DomainName: !Sub '${AppSubdomain}.${DomainName}'
-      ValidationMethod: DNS
-      DomainValidationOptions:
-        - DomainName: !Sub '${AppSubdomain}.${DomainName}'
-          HostedZoneId: !Ref HostedZoneId
-
-  # ----------------------------------------------------------- load balancer
-  LoadBalancer:
-    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
-    Properties:
-      Type: application
-      Scheme: internet-facing
-      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
-      SecurityGroups: [!Ref AlbSecurityGroup]
-      LoadBalancerAttributes:
-        # Streamlit holds a long-lived WebSocket open. The 60s default idle
-        # timeout tears it down mid-session and the UI reconnects visibly.
-        - Key: idle_timeout.timeout_seconds
-          Value: '300'
-        - Key: routing.http2.enabled
-          Value: 'true'
-
-  TargetGroup:
-    Type: AWS::ElasticLoadBalancingV2::TargetGroup
-    Properties:
-      VpcId: !Ref Vpc
-      Port: 8501
-      Protocol: HTTP
-      TargetType: ip
-      HealthCheckPath: /_stcore/health
-      HealthCheckProtocol: HTTP
-      HealthCheckIntervalSeconds: 30
-      HealthCheckTimeoutSeconds: 5
-      HealthyThresholdCount: 2
-      UnhealthyThresholdCount: 3
-      Matcher:
-        HttpCode: '200'
-      TargetGroupAttributes:
-        - Key: deregistration_delay.timeout_seconds
-          Value: '30'
-        # Pins a browser session to one task. Required the moment DesiredCount
-        # exceeds 1, because Streamlit session state is per-process.
-        - Key: stickiness.enabled
-          Value: 'true'
-        - Key: stickiness.type
-          Value: lb_cookie
-        - Key: stickiness.lb_cookie.duration_seconds
-          Value: '86400'
-
-  HttpListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
-      DefaultActions:
-        - Type: redirect
-          RedirectConfig:
-            Protocol: HTTPS
-            Port: '443'
-            StatusCode: HTTP_301
-
-  HttpsListener:
-    Type: AWS::ElasticLoadBalancingV2::Listener
-    Properties:
-      LoadBalancerArn: !Ref LoadBalancer
-      Port: 443
-      Protocol: HTTPS
-      SslPolicy: ELBSecurityPolicy-TLS13-1-2-2021-06
-      Certificates:
-        - CertificateArn: !Ref Certificate
-      DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref TargetGroup
+      BucketName: !Sub 'telos-deploy-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldBundles
+            Status: Enabled
+            NoncurrentVersionExpirationInDays: 7
+      VersioningConfiguration:
+        Status: Enabled
 
   # -------------------------------------------------------------------- IAM
-  TaskExecutionRole:
+  InstanceRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Principal: { Service: ecs-tasks.amazonaws.com }
+            Principal: { Service: ec2.amazonaws.com }
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        # Gives Session Manager shell access and Run Command, without SSH.
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
       Policies:
-        - PolicyName: ReadAppParameters
+        - PolicyName: TelosRuntime
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
-                Action: [ssm:GetParameters]
+                Action: [ssm:GetParameter, ssm:GetParameters, ssm:GetParametersByPath]
                 Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/*'
               - Effect: Allow
-                Action: [kms:Decrypt]
+                Action: kms:Decrypt
                 Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm'
-
-  TaskRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: { Service: ecs-tasks.amazonaws.com }
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: WriteOwnLogs
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
               - Effect: Allow
-                Action: [logs:CreateLogStream, logs:PutLogEvents]
-                Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/ecs/telos*'
+                Action: [s3:GetObject]
+                Resource: !Sub '${DeployBucket.Arn}/*'
 
-  # -------------------------------------------------------------------- ECS
-  LogGroup:
-    Type: AWS::Logs::LogGroup
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
     Properties:
-      LogGroupName: !Sub '/ecs/${AWS::StackName}'
-      RetentionInDays: !Ref LogRetentionDays
+      Roles: [!Ref InstanceRole]
 
-  Cluster:
-    Type: AWS::ECS::Cluster
+  # --------------------------------------------------------------- addressing
+  ElasticIp:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
     Properties:
-      ClusterName: !Sub '${AWS::StackName}-cluster'
-      ClusterSettings:
-        - Name: containerInsights
-          Value: disabled
+      Domain: vpc
+      Tags: [{ Key: Name, Value: !Sub '${AWS::StackName}-eip' }]
 
-  TaskDefinition:
-    Type: AWS::ECS::TaskDefinition
+  EipAssociation:
+    Type: AWS::EC2::EIPAssociation
     Properties:
-      Family: !Sub '${AWS::StackName}-task'
-      Cpu: !Ref ContainerCpu
-      Memory: !Ref ContainerMemory
-      NetworkMode: awsvpc
-      RequiresCompatibilities: [FARGATE]
-      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
-      TaskRoleArn: !GetAtt TaskRole.Arn
-      RuntimePlatform:
-        CpuArchitecture: X86_64
-        OperatingSystemFamily: LINUX
-      ContainerDefinitions:
-        - Name: telos
-          Image: !Ref ImageUri
-          Essential: true
-          PortMappings:
-            - ContainerPort: 8501
-              Protocol: tcp
-          # Secrets arrive as env vars at runtime and are never in the image.
-          Secrets:
-            - Name: ANTHROPIC_API_KEY
-              ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/ANTHROPIC_API_KEY'
-            - Name: DATABASE_URL
-              ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/DATABASE_URL'
-            - Name: SUPABASE_URL
-              ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/SUPABASE_URL'
-            - Name: SUPABASE_ANON_KEY
-              ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/SUPABASE_ANON_KEY'
-            - Name: ADMIN_PASSWORD
-              ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/ADMIN_PASSWORD'
-            - Name: OWNER_EMAILS
-              ValueFrom: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/telos/OWNER_EMAILS'
-          LogConfiguration:
-            LogDriver: awslogs
-            Options:
-              awslogs-group: !Ref LogGroup
-              awslogs-region: !Ref AWS::Region
-              awslogs-stream-prefix: telos
+      AllocationId: !GetAtt ElasticIp.AllocationId
+      InstanceId: !Ref Instance
 
-  Service:
-    Type: AWS::ECS::Service
-    DependsOn: HttpsListener
-    Properties:
-      ServiceName: !Sub '${AWS::StackName}-service'
-      Cluster: !Ref Cluster
-      TaskDefinition: !Ref TaskDefinition
-      DesiredCount: !Ref DesiredCount
-      LaunchType: FARGATE
-      HealthCheckGracePeriodSeconds: 90
-      DeploymentConfiguration:
-        MinimumHealthyPercent: 100
-        MaximumPercent: 200
-        DeploymentCircuitBreaker:
-          Enable: true
-          Rollback: true
-      NetworkConfiguration:
-        AwsvpcConfiguration:
-          # Public IP is required here: the tasks sit in public subnets and
-          # need outbound reach to ECR, SSM, Supabase and the Anthropic API.
-          # A NAT gateway would remove this at roughly $32/month, which is more
-          # than the rest of this stack costs put together.
-          AssignPublicIp: ENABLED
-          Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
-          SecurityGroups: [!Ref ServiceSecurityGroup]
-      LoadBalancers:
-        - ContainerName: telos
-          ContainerPort: 8501
-          TargetGroupArn: !Ref TargetGroup
-
-  # ------------------------------------------------------------------- DNS
   AppDnsRecord:
     Type: AWS::Route53::RecordSet
     Properties:
       HostedZoneId: !Ref HostedZoneId
       Name: !Sub '${AppSubdomain}.${DomainName}'
       Type: A
-      AliasTarget:
-        DNSName: !GetAtt LoadBalancer.DNSName
-        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
-        EvaluateTargetHealth: false
+      TTL: 300
+      ResourceRecords: [!Ref ElasticIp]
+
+  # ---------------------------------------------------------------- instance
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmi
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds: [!Ref InstanceSecurityGroup]
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref VolumeSizeGb
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      MetadataOptions:
+        HttpTokens: required          # IMDSv2 only
+        HttpEndpoint: enabled
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}'
+        - Key: TelosRole
+          Value: app
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          exec > >(tee /var/log/telos-bootstrap.log|logger -t telos -s 2>/dev/console) 2>&1
+
+          dnf update -y
+          dnf install -y docker unzip
+          systemctl enable --now docker
+
+          # Compose v2 as a docker plugin (arm64).
+          mkdir -p /usr/libexec/docker/cli-plugins
+          curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-compose \
+            https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64
+          chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+
+          mkdir -p /opt/telos/app
+
+          # Pull secrets from Parameter Store into an env file the container reads.
+          cat > /opt/telos/refresh-env.sh <<'REFRESH'
+          #!/bin/bash
+          set -euo pipefail
+          REGION="${AWS::Region}"
+          OUT=/opt/telos/.env
+          : > "$OUT.tmp"
+          for KEY in ANTHROPIC_API_KEY DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY ADMIN_PASSWORD OWNER_EMAILS; do
+            VALUE=$(aws ssm get-parameter --name "/telos/$KEY" --with-decryption \
+                      --query 'Parameter.Value' --output text --region "$REGION" 2>/dev/null || echo "")
+            printf '%s=%s\n' "$KEY" "$VALUE" >> "$OUT.tmp"
+          done
+          chmod 600 "$OUT.tmp"
+          mv "$OUT.tmp" "$OUT"
+          REFRESH
+          chmod +x /opt/telos/refresh-env.sh
+
+          # Pull the newest source bundle from S3 and (re)start the stack.
+          cat > /opt/telos/deploy.sh <<'DEPLOY'
+          #!/bin/bash
+          set -euo pipefail
+          BUCKET="${DeployBucket}"
+          cd /opt/telos
+          if aws s3 cp "s3://$BUCKET/app.zip" /tmp/app.zip --region "${AWS::Region}"; then
+            rm -rf /opt/telos/app.new && mkdir -p /opt/telos/app.new
+            unzip -q -o /tmp/app.zip -d /opt/telos/app.new
+            rm -rf /opt/telos/app.old
+            [ -d /opt/telos/app ] && mv /opt/telos/app /opt/telos/app.old || true
+            mv /opt/telos/app.new /opt/telos/app
+          fi
+          /opt/telos/refresh-env.sh
+          cd /opt/telos
+          docker compose up -d --build
+          docker image prune -f
+          DEPLOY
+          chmod +x /opt/telos/deploy.sh
+
+          # Caddy: automatic Let's Encrypt certificates, and reverse_proxy
+          # forwards the WebSocket Upgrade handshake without extra config.
+          cat > /opt/telos/Caddyfile <<CADDY
+          ${AppSubdomain}.${DomainName} {
+              encode zstd gzip
+              reverse_proxy telos:8501
+          }
+          CADDY
+
+          cat > /opt/telos/docker-compose.yml <<'COMPOSE'
+          services:
+            telos:
+              build: ./app
+              restart: unless-stopped
+              env_file: /opt/telos/.env
+              expose: ["8501"]
+              logging:
+                driver: json-file
+                options: { max-size: "10m", max-file: "3" }
+            caddy:
+              image: caddy:2-alpine
+              restart: unless-stopped
+              ports: ["80:80", "443:443"]
+              volumes:
+                - /opt/telos/Caddyfile:/etc/caddy/Caddyfile:ro
+                - caddy_data:/data
+                - caddy_config:/config
+              depends_on: [telos]
+              logging:
+                driver: json-file
+                options: { max-size: "10m", max-file: "3" }
+          volumes:
+            caddy_data:
+            caddy_config:
+          COMPOSE
+
+          # Bring the stack back up after a reboot.
+          cat > /etc/systemd/system/telos.service <<'UNIT'
+          [Unit]
+          Description=Telos application stack
+          Requires=docker.service
+          After=docker.service network-online.target
+          [Service]
+          Type=oneshot
+          RemainAfterExit=yes
+          WorkingDirectory=/opt/telos
+          ExecStart=/opt/telos/refresh-env.sh
+          ExecStartPost=/usr/bin/docker compose up -d
+          ExecStop=/usr/bin/docker compose down
+          [Install]
+          WantedBy=multi-user.target
+          UNIT
+          systemctl daemon-reload
+          systemctl enable telos.service
+
+          # Supabase pauses Free-plan projects after 7 days of low activity, which
+          # would leave a visitor staring at a database error. One trivial query a
+          # day keeps the project marked active. Costs nothing.
+          cat > /opt/telos/keepalive.sh <<'KEEP'
+          #!/bin/bash
+          cd /opt/telos
+          docker compose exec -T telos python -c "\
+          from core.database import get_connection
+          conn = get_connection(); cur = conn.cursor()
+          cur.execute('SELECT 1'); cur.close(); conn.close()
+          print('supabase keepalive ok')" || echo "keepalive failed"
+          KEEP
+          chmod +x /opt/telos/keepalive.sh
+
+          cat > /etc/systemd/system/telos-keepalive.service <<'KUNIT'
+          [Unit]
+          Description=Keep the Supabase project from pausing for inactivity
+          [Service]
+          Type=oneshot
+          ExecStart=/opt/telos/keepalive.sh
+          KUNIT
+
+          cat > /etc/systemd/system/telos-keepalive.timer <<'KTIMER'
+          [Unit]
+          Description=Daily Supabase keepalive
+          [Timer]
+          OnCalendar=daily
+          RandomizedDelaySec=3600
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+          KTIMER
+          systemctl daemon-reload
+          systemctl enable --now telos-keepalive.timer
+
+          # Unattended security patching.
+          dnf install -y dnf-automatic
+          sed -i 's/^apply_updates.*/apply_updates = yes/' /etc/dnf/automatic.conf
+          systemctl enable --now dnf-automatic.timer
+
+          echo "bootstrap complete — waiting for first deploy bundle"
 
 Outputs:
   AppUrl:
     Description: Public URL for the app.
     Value: !Sub 'https://${AppSubdomain}.${DomainName}'
-  LoadBalancerDns:
-    Description: Raw ALB hostname, useful for testing before DNS resolves.
-    Value: !GetAtt LoadBalancer.DNSName
-  ClusterName:
-    Value: !Ref Cluster
-  ServiceName:
-    Value: !GetAtt Service.Name
-  LogGroupName:
-    Value: !Ref LogGroup
+  PublicIp:
+    Description: Elastic IP. Stable across stops, restarts and redeploys.
+    Value: !Ref ElasticIp
+  InstanceId:
+    Description: Use with SSM Session Manager and Run Command.
+    Value: !Ref Instance
+  DeployBucketName:
+    Value: !Ref DeployBucket
+  SessionCommand:
+    Description: Open a shell on the box without SSH.
+    Value: !Sub 'aws ssm start-session --target ${Instance} --region ${AWS::Region}'

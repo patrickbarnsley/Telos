@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-  Deploy Telos to AWS: ECR image, ECS Fargate service behind an ALB, and the
-  landing page on S3 + CloudFront.
+  Deploy Telos to AWS: a Graviton EC2 instance running Docker and Caddy, and
+  the landing page on S3 + CloudFront.
 
 .DESCRIPTION
   Run the steps in order. Each is idempotent — re-running is safe.
@@ -12,17 +12,19 @@
     .\deploy.ps1 -Step app        # build, push, deploy the app stack
     .\deploy.ps1 -Step release    # rebuild + push + roll the service (routine)
     .\deploy.ps1 -Step status     # where everything stands
+    .\deploy.ps1 -Step logs       # recent application logs
     .\deploy.ps1 -Step destroy    # tear it all down
 
 .NOTES
-  Requires AWS CLI v2 and Docker Desktop, and an AWS profile with rights to
-  create VPC, ECS, ELB, ACM, Route 53, S3, CloudFront, IAM and SSM resources.
+  Requires AWS CLI v2 and an AWS profile with rights to
+  create VPC, EC2, ACM, Route 53, S3, CloudFront, IAM and SSM resources.
+  Docker is NOT needed locally - the image is built on the instance.
 #>
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('dns', 'secrets', 'site', 'app', 'release', 'status', 'destroy')]
+    [ValidateSet('dns', 'secrets', 'site', 'app', 'release', 'status', 'logs', 'destroy')]
     [string]$Step,
 
     [string]$Domain      = 'usetelosapp.com',
@@ -37,7 +39,6 @@ $ErrorActionPreference = 'Stop'
 $DnsStack  = 'telos-dns'
 $SiteStack = 'telos-site'
 $AppStack  = 'telos-app'
-$EcrRepo   = 'telos'
 
 function Say  { param($m) Write-Host "`n=== $m" -ForegroundColor Cyan }
 function Ok   { param($m) Write-Host "  $m" -ForegroundColor Green }
@@ -66,10 +67,78 @@ function Require-HostedZone {
     return $id
 }
 
+function Invoke-Release {
+    <#
+      Ships source to S3 and asks the instance to rebuild via SSM Run Command.
+
+      No Docker on your machine, no ECR, and no cross-compiling for ARM: the
+      image is built natively on the Graviton instance. No SSH either - Run
+      Command reaches the box through the SSM agent.
+    #>
+    $bucket   = Get-StackOutput $AppStack 'DeployBucketName'
+    $instance = Get-StackOutput $AppStack 'InstanceId'
+    if (-not $bucket -or -not $instance) { throw "App stack not deployed yet. Run: .\deploy.ps1 -Step app" }
+
+    $staging = Join-Path $env:TEMP "telos-bundle-$(Get-Random)"
+    $zipPath = Join-Path $env:TEMP "telos-app-$(Get-Random).zip"
+    New-Item -ItemType Directory -Path $staging -Force | Out-Null
+    try {
+        foreach ($item in @('app.py', 'requirements.txt', 'Dockerfile')) {
+            Copy-Item (Join-Path $RepoRoot $item) $staging -Force
+        }
+        foreach ($dir in @('core', 'pages', '.streamlit')) {
+            Copy-Item (Join-Path $RepoRoot $dir) $staging -Recurse -Force
+        }
+        # Never ship caches or local secrets to the server.
+        Get-ChildItem $staging -Recurse -Force -Include '__pycache__', '*.pyc', '.env', 'secrets.toml' |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipPath -Force
+        $sizeKb = [math]::Round((Get-Item $zipPath).Length / 1KB)
+        Ok "Bundle built ($sizeKb KB)"
+
+        Aws s3 cp $zipPath "s3://$bucket/app.zip"
+        if ($LASTEXITCODE -ne 0) { throw 'Upload to S3 failed.' }
+        Ok 'Uploaded'
+
+        Say 'Building and restarting on the instance'
+        $cmdId = Aws ssm send-command `
+            --instance-ids $instance `
+            --document-name 'AWS-RunShellScript' `
+            --comment 'Telos deploy' `
+            --parameters 'commands=["/opt/telos/deploy.sh"]' `
+            --timeout-seconds 900 `
+            --query 'Command.CommandId' --output text
+        if ($LASTEXITCODE -ne 0 -or -not $cmdId) { throw 'Could not send the deploy command. Is the instance registered with SSM yet? It takes a few minutes after first boot.' }
+
+        Write-Host '  Building the image on the instance (first run 5-8 min)' -NoNewline
+        $status = 'Pending'
+        for ($i = 0; $i -lt 120; $i++) {
+            Start-Sleep -Seconds 10
+            Write-Host '.' -NoNewline
+            $status = (Aws ssm get-command-invocation --command-id $cmdId --instance-id $instance `
+                        --query 'Status' --output text 2>$null)
+            if ($status -in @('Success', 'Failed', 'TimedOut', 'Cancelled')) { break }
+        }
+        Write-Host ''
+        if ($status -ne 'Success') {
+            Warn "Deploy command finished with status: $status"
+            Warn 'Output follows:'
+            Aws ssm get-command-invocation --command-id $cmdId --instance-id $instance `
+                --query 'StandardErrorContent' --output text
+            throw 'Deploy failed on the instance.'
+        }
+        Ok 'Application rebuilt and running'
+    }
+    finally {
+        Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Require-Tool aws 'Install AWS CLI v2: https://aws.amazon.com/cli/'
 $AccountId = (Aws sts get-caller-identity --query Account --output text).Trim()
 if (-not $AccountId) { throw 'Could not resolve AWS account. Check your credentials.' }
-$Registry = "$AccountId.dkr.ecr.$Region.amazonaws.com"
 
 switch ($Step) {
 
@@ -152,72 +221,34 @@ switch ($Step) {
 
 # ---------------------------------------------------------------------- app
 'app' {
-    Require-Tool docker 'Install Docker Desktop: https://docs.docker.com/desktop/'
     $zone = Require-HostedZone
 
-    Say 'Ensuring the ECR repository exists'
-    $null = Aws ecr describe-repositories --repository-names $EcrRepo 2>$null
-    if ($LASTEXITCODE -ne 0) {
-        Aws ecr create-repository --repository-name $EcrRepo `
-            --image-scanning-configuration scanOnPush=true `
-            --image-tag-mutability IMMUTABLE | Out-Null
-        Ok 'Repository created'
-    } else { Ok 'Repository already exists' }
-
-    Say 'Logging Docker in to ECR'
-    Aws ecr get-login-password | docker login --username AWS --password-stdin $Registry
-    if ($LASTEXITCODE -ne 0) { throw 'ECR login failed.' }
-
-    Say "Building the image ($ImageTag)"
-    # --platform matters: Fargate here runs X86_64, and an image built on an
-    # ARM machine will start and then die with "exec format error".
-    docker build --platform linux/amd64 -t "${EcrRepo}:$ImageTag" $RepoRoot
-    if ($LASTEXITCODE -ne 0) { throw 'Docker build failed.' }
-
-    docker tag "${EcrRepo}:$ImageTag" "$Registry/${EcrRepo}:$ImageTag"
-    Say 'Pushing to ECR'
-    docker push "$Registry/${EcrRepo}:$ImageTag"
-    if ($LASTEXITCODE -ne 0) { throw 'Docker push failed.' }
-
-    Say 'Deploying the application stack (VPC, ALB, ECS Fargate)'
-    Warn 'First run takes 10-15 minutes, mostly certificate validation.'
+    Say 'Deploying the application stack (VPC, EC2, Elastic IP, DNS)'
+    Warn 'First run takes about 5 minutes.'
     Aws cloudformation deploy `
         --stack-name $AppStack `
         --template-file (Join-Path $RepoRoot 'infra\telos-app.yaml') `
         --capabilities CAPABILITY_IAM `
         --parameter-overrides `
             "DomainName=$Domain" `
-            "HostedZoneId=$zone" `
-            "ImageUri=$Registry/${EcrRepo}:$ImageTag"
+            "HostedZoneId=$zone"
 
+    Ok "Instance:  $(Get-StackOutput $AppStack 'InstanceId')"
+    Ok "Public IP: $(Get-StackOutput $AppStack 'PublicIp')"
+
+    Say 'Shipping the application code'
+    Invoke-Release
+
+    Write-Host ''
     Ok (Get-StackOutput $AppStack 'AppUrl')
-    Ok "ALB hostname: $(Get-StackOutput $AppStack 'LoadBalancerDns')"
+    Warn 'Caddy needs a minute or two to obtain the TLS certificate on first run.'
+    Warn 'A browser warning during that window is expected. Give it 5 minutes.'
 }
 
 # ------------------------------------------------------------------ release
 'release' {
-    Require-Tool docker 'Install Docker Desktop.'
-    $zone = Require-HostedZone
-
-    Say "Building and pushing $ImageTag"
-    Aws ecr get-login-password | docker login --username AWS --password-stdin $Registry
-    docker build --platform linux/amd64 -t "${EcrRepo}:$ImageTag" $RepoRoot
-    if ($LASTEXITCODE -ne 0) { throw 'Docker build failed.' }
-    docker tag "${EcrRepo}:$ImageTag" "$Registry/${EcrRepo}:$ImageTag"
-    docker push "$Registry/${EcrRepo}:$ImageTag"
-    if ($LASTEXITCODE -ne 0) { throw 'Docker push failed.' }
-
-    Say 'Rolling the service onto the new image'
-    Aws cloudformation deploy `
-        --stack-name $AppStack `
-        --template-file (Join-Path $RepoRoot 'infra\telos-app.yaml') `
-        --capabilities CAPABILITY_IAM `
-        --parameter-overrides `
-            "DomainName=$Domain" `
-            "HostedZoneId=$zone" `
-            "ImageUri=$Registry/${EcrRepo}:$ImageTag"
-
-    Ok 'Deployment circuit breaker is on — a failing image rolls back automatically.'
+    Say 'Shipping the application code'
+    Invoke-Release
     Ok (Get-StackOutput $AppStack 'AppUrl')
 }
 
@@ -229,23 +260,52 @@ switch ($Step) {
         if ($LASTEXITCODE -eq 0) { Ok "$s : $st" } else { Warn "$s : not deployed" }
     }
 
-    $cluster = Get-StackOutput $AppStack 'ClusterName'
-    $service = Get-StackOutput $AppStack 'ServiceName'
-    if ($cluster -and $service) {
-        Say 'ECS service'
-        Aws ecs describe-services --cluster $cluster --services $service `
-            --query 'services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,status:status}' `
+    $instance = Get-StackOutput $AppStack 'InstanceId'
+    if ($instance) {
+        Say 'Instance'
+        Aws ec2 describe-instances --instance-ids $instance `
+            --query 'Reservations[0].Instances[0].{state:State.Name,type:InstanceType,ip:PublicIpAddress,launched:LaunchTime}' `
             --output table
-        Say 'Recent events'
-        Aws ecs describe-services --cluster $cluster --services $service `
-            --query 'services[0].events[0:5].message' --output text
+
+        Say 'Containers'
+        $cmdId = Aws ssm send-command --instance-ids $instance `
+            --document-name 'AWS-RunShellScript' `
+            --parameters 'commands=["cd /opt/telos && docker compose ps"]' `
+            --query 'Command.CommandId' --output text 2>$null
+        if ($cmdId) {
+            Start-Sleep -Seconds 5
+            Aws ssm get-command-invocation --command-id $cmdId --instance-id $instance `
+                --query 'StandardOutputContent' --output text 2>$null
+        } else {
+            Warn 'Could not reach the instance over SSM.'
+        }
     }
 
     $url = Get-StackOutput $AppStack 'AppUrl'
     if ($url) { Say 'URLs'; Ok "App:  $url"; Ok "Site: https://$Domain" }
 
-    $lg = Get-StackOutput $AppStack 'LogGroupName'
-    if ($lg) { Write-Host "`n  Tail logs:  aws logs tail $lg --follow --region $Region" -ForegroundColor White }
+    if ($instance) {
+        Write-Host ''
+        Write-Host "  Shell:  aws ssm start-session --target $instance --region $Region" -ForegroundColor White
+        Write-Host "  Logs:   .\deploy\deploy.ps1 -Step logs" -ForegroundColor White
+    }
+}
+
+# --------------------------------------------------------------------- logs
+'logs' {
+    $instance = Get-StackOutput $AppStack 'InstanceId'
+    if (-not $instance) { throw 'App stack not deployed.' }
+    Say 'Last 80 lines from the application container'
+    $cmdId = Aws ssm send-command --instance-ids $instance `
+        --document-name 'AWS-RunShellScript' `
+        --parameters 'commands=["cd /opt/telos && docker compose logs --tail 80 telos"]' `
+        --query 'Command.CommandId' --output text
+    Start-Sleep -Seconds 6
+    Aws ssm get-command-invocation --command-id $cmdId --instance-id $instance `
+        --query 'StandardOutputContent' --output text
+    Write-Host ''
+    Write-Host "  Live tail:  aws ssm start-session --target $instance --region $Region" -ForegroundColor White
+    Write-Host "              then: cd /opt/telos && docker compose logs -f telos" -ForegroundColor White
 }
 
 # ------------------------------------------------------------------ destroy
