@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Telos — Route 53 hosted zone. Deploy this FIRST, then point your registrar's
+  nameservers at the four values in the Nameservers output and wait for
+  propagation before deploying the site or app stacks. Both of those stacks
+  request ACM certificates validated by DNS; if the nameservers are not live
+  yet, those stacks will sit in CREATE_IN_PROGRESS until they time out.
+
+Parameters:
+  DomainName:
+    Type: String
+    Default: usetelosapp.com
+    Description: Apex domain, no scheme and no trailing dot.
+
+Resources:
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Ref DomainName
+      HostedZoneConfig:
+        Comment: !Sub 'Telos — ${DomainName}'
+
+Outputs:
+  HostedZoneId:
+    Description: Pass this to the site and app stacks.
+    Value: !Ref HostedZone
+    Export:
+      Name: !Sub '${AWS::StackName}-HostedZoneId'
+  Nameservers:
+    Description: Set these four as the nameservers at your domain registrar.
+    Value: !Join [', ', !GetAtt HostedZone.NameServers]

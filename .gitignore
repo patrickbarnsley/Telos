@@ -1,15 +1,24 @@
 # Virtual environment
 venv/
+.venv/
 
 # Environment variables (API keys — never commit)
 .env
+.streamlit/secrets.toml
 
 # Python cache
 __pycache__/
 *.pyc
 
-# Database file
+# Database file (legacy SQLite era)
 *.db
 
 # Streamlit cache
 .streamlit/cache
+
+# Editor backups
+*.bak
+*.bak-*
+
+# Landing page — deployed straight to S3, deliberately kept out of the repo
+telos-site/

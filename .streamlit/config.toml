@@ -1,0 +1,22 @@
+# Server settings for running behind an AWS Application Load Balancer.
+[server]
+headless = true
+port = 8501
+address = "0.0.0.0"
+# The ALB terminates TLS and forwards to the container over plain HTTP on the
+# same origin, so Streamlit's CORS check has nothing useful to protect and only
+# causes false rejections. XSRF protection stays ON.
+enableCORS = false
+enableXsrfProtection = true
+maxUploadSize = 10
+
+[browser]
+gatherUsageStats = false
+
+[theme]
+base = "dark"
+primaryColor = "#C9A84C"
+backgroundColor = "#0F1117"
+secondaryBackgroundColor = "#1A1D27"
+textColor = "#FFFFFF"
+font = "sans serif"
