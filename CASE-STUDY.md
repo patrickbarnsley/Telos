@@ -1,6 +1,6 @@
 # Telos — Product Case Study
 
-**Live:** [usetelosapp.com](https://usetelosapp.com) · **Demo, no signup:** [try it](https://telos-career.streamlit.app/?demo=1) · **Code:** [github.com/patrickbarnsley/Telos](https://github.com/patrickbarnsley/Telos)
+**Live:** [usetelosapp.com](https://usetelosapp.com) · **Demo, no signup:** [try it](https://app.usetelosapp.com/?demo=1) · **Code:** [github.com/patrickbarnsley/Telos](https://github.com/patrickbarnsley/Telos)
 
 A career campaign system for job seekers. Built and shipped solo. This document
 is about the decisions, including the ones I got wrong.
