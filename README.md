@@ -2,7 +2,7 @@
 
 > *Telos is the Greek word for ultimate purpose. The app helps you find and reach yours.*
 
-**[usetelosapp.com](https://usetelosapp.com)** · **[Live demo — no signup](https://telos-career.streamlit.app/?demo=1)**
+**[usetelosapp.com](https://usetelosapp.com)** · **[Live demo — no signup](https://telos-career.streamlit.app/?demo=1)** · **[Product case study](CASE-STUDY.md)**
 
 Telos is a career campaign system for job seekers. Track every application, score your
 resume against any job description with AI, and get a specific path to the role you
