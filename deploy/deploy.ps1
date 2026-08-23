@@ -31,6 +31,11 @@ param(
     [string]$Region      = 'us-east-1',
     [string]$Profile     = 'default',
     [string]$ImageTag    = (Get-Date -Format 'yyyyMMdd-HHmmss'),
+
+    # secrets step: read values from a file instead of prompting. Accepts .env
+    # style (KEY=value) or TOML style (KEY = "value"), so a block copied
+    # straight out of Streamlit Cloud's secrets panel works as-is.
+    [string]$EnvFile     = '',
     [string]$RepoRoot    = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 )
 
@@ -195,36 +200,90 @@ switch ($Step) {
 # ------------------------------------------------------------------ secrets
 'secrets' {
     Say 'Writing application secrets to SSM Parameter Store'
-    Write-Host '  Stored as SecureString. Parameter Store standard tier is free;'
-    Write-Host '  Secrets Manager would be $0.40 per secret per month.'
-    Write-Host '  Press Enter to leave an existing value unchanged.'
-    Write-Host ''
 
-    $names = @(
-        @{ Key = 'ANTHROPIC_API_KEY'; Prompt = 'Anthropic API key' },
-        @{ Key = 'DATABASE_URL';      Prompt = 'Postgres connection string (Supabase)' },
-        @{ Key = 'SUPABASE_URL';      Prompt = 'Supabase project URL' },
-        @{ Key = 'SUPABASE_ANON_KEY'; Prompt = 'Supabase anon/publishable key' },
-        @{ Key = 'ADMIN_PASSWORD';    Prompt = 'Admin page password' },
-        @{ Key = 'OWNER_EMAILS';      Prompt = 'Your email (unmetered AI usage)' }
-    )
+    $keys = @('ANTHROPIC_API_KEY', 'DATABASE_URL', 'SUPABASE_URL',
+              'SUPABASE_ANON_KEY', 'ADMIN_PASSWORD', 'OWNER_EMAILS')
 
-    foreach ($n in $names) {
-        $path = "/telos/$($n.Key)"
-        $null = Aws ssm get-parameter --name $path --query 'Parameter.Name' --output text 2>&1
-        $exists = ($LASTEXITCODE -eq 0)
-        $label = if ($exists) { "$($n.Prompt) [already set]" } else { "$($n.Prompt) [not set]" }
-        $secure = Read-Host -Prompt "  $label" -AsSecureString
-        $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-                    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-        if ([string]::IsNullOrWhiteSpace($plain)) {
-            if (-not $exists) { Warn "    $($n.Key) is still unset - the task will fail to start without it." }
-            continue
-        }
-        Aws ssm put-parameter --name $path --value $plain --type SecureString --overwrite | Out-Null
-        if ($LASTEXITCODE -ne 0) { throw "Failed to save $($n.Key) to Parameter Store." }
-        Ok "$($n.Key) saved"
+    $prompts = @{
+        ANTHROPIC_API_KEY = 'Anthropic API key'
+        DATABASE_URL      = 'Postgres connection string (Supabase)'
+        SUPABASE_URL      = 'Supabase project URL'
+        SUPABASE_ANON_KEY = 'Supabase anon/publishable key'
+        ADMIN_PASSWORD    = 'Admin page password'
+        OWNER_EMAILS      = 'Your email (unmetered AI usage)'
     }
+
+    function Save-Secret {
+        param($Key, $Value)
+        Aws ssm put-parameter --name "/telos/$Key" --value $Value --type SecureString --overwrite | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to save $Key to Parameter Store." }
+        Ok "$Key saved"
+    }
+
+    if ($EnvFile) {
+        # ---- file mode -------------------------------------------------
+        if (-not (Test-Path $EnvFile)) { throw "File not found: $EnvFile" }
+        Ok "Reading from $EnvFile"
+
+        $found = @{}
+        foreach ($line in Get-Content $EnvFile) {
+            $t = $line.Trim()
+            if (-not $t -or $t.StartsWith('#')) { continue }
+            # KEY=value  and  KEY = "value"  both parse here
+            if ($t -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
+                $k = $matches[1].Trim()
+                $v = $matches[2].Trim().Trim('"').Trim("'")
+                if ($keys -contains $k -and $v) { $found[$k] = $v }
+            }
+        }
+
+        if ($found.Count -eq 0) { throw "No recognised keys found in $EnvFile. Expected: $($keys -join ', ')" }
+
+        foreach ($k in $keys) {
+            if ($found.ContainsKey($k)) { Save-Secret $k $found[$k] }
+            else { Warn "$k not in file - the app will not start without it" }
+        }
+
+        Write-Host ''
+        Warn 'That file holds your secrets in plain text. Delete it now:'
+        Write-Host "    Remove-Item '$EnvFile'" -ForegroundColor White
+    }
+    else {
+        # ---- prompt mode -----------------------------------------------
+        Write-Host '  Stored as SecureString. Parameter Store standard tier is free;'
+        Write-Host '  Secrets Manager would be $0.40 per secret per month.'
+        Write-Host '  Press Enter to leave an existing value unchanged.'
+        Write-Host '  Typing is masked, so nothing appears on screen as you type.'
+        Write-Host ''
+        Write-Host '  Faster alternative: put the values in a file and run'
+        Write-Host '    .\deploy\deploy.ps1 -Step secrets -EnvFile .\telos-secrets.txt' -ForegroundColor White
+        Write-Host ''
+
+        foreach ($k in $keys) {
+            $null = Aws ssm get-parameter --name "/telos/$k" --query 'Parameter.Name' --output text 2>&1
+            $exists = ($LASTEXITCODE -eq 0)
+            $label = if ($exists) { "$($prompts[$k]) [already set]" } else { "$($prompts[$k]) [not set]" }
+
+            $secure = Read-Host -Prompt "  $label" -AsSecureString
+            $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+                        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+
+            if ([string]::IsNullOrWhiteSpace($plain)) {
+                if (-not $exists) { Warn "    $k is still unset - the app will not start without it" }
+                continue
+            }
+            Save-Secret $k $plain
+        }
+    }
+
+    Say 'Verifying'
+    $missing = @()
+    foreach ($k in $keys) {
+        $null = Aws ssm get-parameter --name "/telos/$k" --query 'Parameter.Name' --output text 2>&1
+        if ($LASTEXITCODE -ne 0) { $missing += $k }
+    }
+    if ($missing.Count -gt 0) { Warn "Still missing: $($missing -join ', ')" }
+    else { Ok "All $($keys.Count) secrets are stored" }
 }
 
 # --------------------------------------------------------------------- site
