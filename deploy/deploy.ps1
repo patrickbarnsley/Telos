@@ -44,11 +44,30 @@ function Say  { param($m) Write-Host "`n=== $m" -ForegroundColor Cyan }
 function Ok   { param($m) Write-Host "  $m" -ForegroundColor Green }
 function Warn { param($m) Write-Host "  $m" -ForegroundColor Yellow }
 
-function Aws { aws @args --region $Region --profile $Profile }
+# Resolve the real AWS CLI executable once.
+#
+# This MUST target aws.exe rather than the bare name 'aws'. PowerShell function
+# names are case-insensitive, so a function named Aws whose body calls 'aws'
+# calls itself, recursing until the interpreter aborts with a call depth
+# overflow. Binding to the Application command avoids the collision entirely.
+$script:AwsExe = $null
+function Get-AwsExe {
+    if (-not $script:AwsExe) {
+        $cmd = Get-Command aws.exe -CommandType Application -ErrorAction SilentlyContinue |
+               Select-Object -First 1
+        if (-not $cmd) { throw 'AWS CLI v2 not found on PATH. Install: https://aws.amazon.com/cli/' }
+        $script:AwsExe = $cmd.Source
+    }
+    return $script:AwsExe
+}
+
+function Aws { & (Get-AwsExe) @args --region $Region --profile $Profile }
 
 function Require-Tool {
     param($Name, $Hint)
-    if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
+    # -CommandType Application so this finds the real binary and never matches a
+    # same-named function defined in this script.
+    if (-not (Get-Command $Name -CommandType Application -ErrorAction SilentlyContinue)) {
         throw "$Name not found on PATH. $Hint"
     }
 }
@@ -136,7 +155,7 @@ function Invoke-Release {
     }
 }
 
-Require-Tool aws 'Install AWS CLI v2: https://aws.amazon.com/cli/'
+Require-Tool aws.exe 'Install AWS CLI v2: https://aws.amazon.com/cli/'
 $AccountId = (Aws sts get-caller-identity --query Account --output text).Trim()
 if (-not $AccountId) { throw 'Could not resolve AWS account. Check your credentials.' }
 
