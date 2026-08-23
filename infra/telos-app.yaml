@@ -240,11 +240,20 @@ Resources:
           # up --build' fails with "compose build requires buildx 0.17.0 or
           # later". The asset name carries the version, so the URL is resolved
           # from the releases API rather than hardcoded.
-          BUILDX_URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest \
-                        | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
+          # The distro may already ship a buildx older than Compose's 0.17.0
+          # minimum, so replace whatever is on the plugin path rather than only
+          # installing when absent.
+          BUILDX_URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
           if [ -n "$BUILDX_URL" ]; then
-            curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-buildx "$BUILDX_URL"
-            chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+            curl -fsSL -o /tmp/docker-buildx.new "$BUILDX_URL"
+            chmod +x /tmp/docker-buildx.new
+            for d in /root/.docker/cli-plugins /usr/local/lib/docker/cli-plugins /usr/lib/docker/cli-plugins /usr/libexec/docker/cli-plugins; do
+              if [ -f "$d/docker-buildx" ]; then cp /tmp/docker-buildx.new "$d/docker-buildx"; chmod +x "$d/docker-buildx"; fi
+            done
+            mkdir -p /usr/local/lib/docker/cli-plugins
+            cp /tmp/docker-buildx.new /usr/local/lib/docker/cli-plugins/docker-buildx
+            chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+            rm -f /tmp/docker-buildx.new
             docker buildx version || true
           else
             echo "WARNING: could not resolve a buildx download url"

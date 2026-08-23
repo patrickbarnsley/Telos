@@ -173,23 +173,38 @@ function Invoke-RemoteScript {
 
 $BuildxInstallScript = @'
 set -u
-if docker buildx version >/dev/null 2>&1; then
-  echo "buildx already installed"
-  docker buildx version
+NEED=0.17.0
+CUR=$(docker buildx version 2>/dev/null | grep -oE "[0-9]+\.[0-9]+\.[0-9]+" | head -1)
+echo "buildx currently: ${CUR:-none}"
+if [ -n "$CUR" ] && [ "$(printf "%s\n%s\n" "$CUR" "$NEED" | sort -V | head -1)" = "$NEED" ]; then
+  echo "buildx $CUR meets the $NEED minimum"
   exit 0
 fi
-echo "buildx missing, installing"
-mkdir -p /usr/libexec/docker/cli-plugins
+echo "buildx is missing or older than $NEED, upgrading"
 URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
 if [ -z "$URL" ]; then
   echo "could not resolve a buildx download url"
   exit 1
 fi
 echo "downloading $URL"
-curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-buildx "$URL"
-chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+TMP=/tmp/docker-buildx.new
+curl -fsSL -o "$TMP" "$URL"
+chmod +x "$TMP"
+for d in /root/.docker/cli-plugins /usr/local/lib/docker/cli-plugins /usr/local/libexec/docker/cli-plugins /usr/lib/docker/cli-plugins /usr/libexec/docker/cli-plugins; do
+  if [ -f "$d/docker-buildx" ]; then
+    cp "$TMP" "$d/docker-buildx"
+    chmod +x "$d/docker-buildx"
+    echo "replaced $d/docker-buildx"
+  fi
+done
+mkdir -p /usr/local/lib/docker/cli-plugins
+cp "$TMP" /usr/local/lib/docker/cli-plugins/docker-buildx
+chmod +x /usr/local/lib/docker/cli-plugins/docker-buildx
+rm -f "$TMP"
+echo "buildx now:"
 docker buildx version
 '@
+
 
 function Invoke-Release {
     <#
