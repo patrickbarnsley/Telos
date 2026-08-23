@@ -129,11 +129,18 @@ function Invoke-RemoteScript {
         [string]$Label = 'Running remote script'
     )
 
+    # This file is saved with CRLF, and PowerShell here-strings preserve it.
+    # Carriage returns survive the trip through JSON and reach bash on the
+    # instance, where they break every line ("set: - : invalid option"). Split
+    # on either ending and hand AWS one array element per line; it joins them
+    # with plain newlines when writing the remote script.
+    $lines = @($Script -split "`r?`n" | ForEach-Object { $_.TrimEnd([char]13) })
+
     $payload = @{
         InstanceIds    = @($InstanceId)
         DocumentName   = 'AWS-RunShellScript'
         TimeoutSeconds = $TimeoutSeconds
-        Parameters     = @{ commands = @($Script) }
+        Parameters     = @{ commands = $lines }
     } | ConvertTo-Json -Depth 6
 
     $tmp = Join-Path $env:TEMP "ssm-$(Get-Random).json"
@@ -173,8 +180,7 @@ if docker buildx version >/dev/null 2>&1; then
 fi
 echo "buildx missing, installing"
 mkdir -p /usr/libexec/docker/cli-plugins
-URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest \
-        | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
+URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
 if [ -z "$URL" ]; then
   echo "could not resolve a buildx download url"
   exit 1
