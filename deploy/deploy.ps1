@@ -41,6 +41,14 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# The AWS CLI is a Python program and writes to the console using the Windows
+# ANSI code page by default. Any non-ANSI character in a response - an arrow in
+# cloud-init output, an emoji in application logs - makes it die with a
+# 'charmap codec can't encode character' error instead of printing. Forcing
+# UTF-8 for its output avoids that entirely.
+$env:PYTHONIOENCODING = 'utf-8'
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
+
 $DnsStack  = 'telos-dns'
 $SiteStack = 'telos-site'
 $AppStack  = 'telos-app'
@@ -113,6 +121,32 @@ function Invoke-Release {
     $bucket   = Get-StackOutput $AppStack 'DeployBucketName'
     $instance = Get-StackOutput $AppStack 'InstanceId'
     if (-not $bucket -or -not $instance) { throw "App stack not deployed yet. Run: .\deploy.ps1 -Step app" }
+
+    # CloudFormation reports the instance complete the moment it boots, but the
+    # UserData bootstrap - dnf update, Docker, Compose, writing /opt/telos - runs
+    # for several minutes after that. Sending the deploy before it finishes fails
+    # with 'No such file or directory'. Wait for the bootstrap to land.
+    Say 'Waiting for the instance to finish setting itself up'
+    $ready = $false
+    for ($i = 0; $i -lt 60; $i++) {
+        $probe = Aws ssm send-command --instance-ids $instance `
+                    --document-name 'AWS-RunShellScript' `
+                    --parameters 'commands=["test -x /opt/telos/deploy.sh && echo READY || echo WAITING"]' `
+                    --query 'Command.CommandId' --output text 2>&1
+        if ($LASTEXITCODE -eq 0 -and $probe) {
+            Start-Sleep -Seconds 6
+            $out = Aws ssm get-command-invocation --command-id $probe --instance-id $instance `
+                       --query 'StandardOutputContent' --output text 2>&1
+            if ($out -match 'READY') { $ready = $true; break }
+        }
+        Write-Host '.' -NoNewline
+        Start-Sleep -Seconds 10
+    }
+    Write-Host ''
+    if (-not $ready) {
+        throw "The instance never finished its bootstrap. Check the log with:`n  aws ssm start-session --target $instance --region $Region`n  then: sudo tail -50 /var/log/telos-bootstrap.log"
+    }
+    Ok 'Instance ready'
 
     $staging = Join-Path $env:TEMP "telos-bundle-$(Get-Random)"
     $zipPath = Join-Path $env:TEMP "telos-app-$(Get-Random).zip"
