@@ -84,7 +84,7 @@ with tab2:
         st.info("No usage data yet.")
     else:
         for u in usage:
-            with st.expander(f"**{u['tester_name']}** — {u['target_role'] or 'No target role set'}"):
+            with st.expander(f"**{u['tester_name']}** - {u['target_role'] or 'No target role set'}"):
                 col1, col2, col3, col4 = st.columns(4)
                 col1.metric("Jobs Logged", u['total_jobs'])
                 col2.metric("Match Scores Run", u['total_matches'])
@@ -152,7 +152,7 @@ with tab3:
         st.info("No match results yet.")
     else:
         for r in results:
-            with st.expander(f"**{r['tester_name']}** — {r['company']} | {r['role']} | {r['overall_score']}% | {r['scored_at']}"):
+            with st.expander(f"**{r['tester_name']}** - {r['company']} | {r['role']} | {r['overall_score']}% | {r['scored_at']}"):
                 st.markdown(f"**Summary:** {r['match_summary']}")
 
                 missing = json.loads(r['missing_reqs']) if r['missing_reqs'] else []
@@ -224,7 +224,7 @@ with tab5:
             certs = path.get('critical_certs', [])
             milestones = path.get('milestones', [])
 
-            with st.expander(f"**{p['tester_name']}** — Generated: {p['generated_at']}"):
+            with st.expander(f"**{p['tester_name']}** - Generated: {p['generated_at']}"):
                 st.markdown(f"**Current State:** {path.get('current_state', '')}")
                 st.markdown(f"**Target State:** {path.get('target_state', '')}")
                 st.markdown(f"**Estimated Timeline:** {path.get('estimated_timeline', '')}")
@@ -243,7 +243,7 @@ with tab5:
 
 with tab6:
     st.markdown("### Outcome Tracking & Score Correlation")
-    st.markdown("Jobs that reached interview, offer, or rejection — correlated with their match scores.")
+    st.markdown("Jobs that reached interview, offer, or rejection, correlated with their match scores.")
 
     outcomes = get_all_outcome_correlations()
 
@@ -266,7 +266,7 @@ with tab6:
             for o in offers:
                 score = o["best_match_score"]
                 predictive = o["match_predictive"] or "Not rated"
-                with st.expander(f"**{o['tester_name']}** — {o['company']} | {o['role']} | Score: {score or 'N/A'}%"):
+                with st.expander(f"**{o['tester_name']}** - {o['company']} | {o['role']} | Score: {score or 'N/A'}%"):
                     col1, col2 = st.columns(2)
                     col1.markdown(f"**Outcome Date:** {o['outcome_date'] or 'Not set'}")
                     col1.markdown(f"**Match Runs:** {o['total_match_runs']}")
@@ -278,7 +278,7 @@ with tab6:
             for o in interviews:
                 score = o["best_match_score"]
                 predictive = o["match_predictive"] or "Not rated"
-                with st.expander(f"**{o['tester_name']}** — {o['company']} | {o['role']} | Score: {score or 'N/A'}%"):
+                with st.expander(f"**{o['tester_name']}** - {o['company']} | {o['role']} | Score: {score or 'N/A'}%"):
                     col1, col2 = st.columns(2)
                     col1.markdown(f"**Applied:** {o['date_applied'] or 'N/A'}")
                     col1.markdown(f"**Match Runs:** {o['total_match_runs']}")
@@ -290,7 +290,7 @@ with tab6:
             for o in rejections:
                 score = o["best_match_score"]
                 predictive = o["match_predictive"] or "Not rated"
-                with st.expander(f"**{o['tester_name']}** — {o['company']} | {o['role']} | Score: {score or 'N/A'}%"):
+                with st.expander(f"**{o['tester_name']}** - {o['company']} | {o['role']} | Score: {score or 'N/A'}%"):
                     col1, col2 = st.columns(2)
                     col1.markdown(f"**Outcome Date:** {o['outcome_date'] or 'Not set'}")
                     col1.markdown(f"**Match Runs:** {o['total_match_runs']}")

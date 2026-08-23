@@ -79,7 +79,7 @@ def require_login():
         st.page_link("app.py", label="→ Go to the login page")
         st.stop()
 
-    # Keep the identity key in sync for the rest of the page — but never clobber
+    # Keep the identity key in sync for the rest of the page, but never clobber
     # the demo identity. The demo account is keyed on DEMO_TESTER, not on an
     # email, and overwriting it here would drop demo visitors into an empty
     # account with the demo write-guard disarmed.

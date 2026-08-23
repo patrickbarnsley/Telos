@@ -63,7 +63,7 @@ def extract_jd_from_image(uploaded_file) -> str:
 
     prompt = (
         "Extract the job posting text from this image as accurately as possible. "
-        "Return only the text of the posting itself — role, responsibilities, requirements, "
+        "Return only the text of the posting itself: role, responsibilities, requirements, "
         "qualifications, and any salary or company details shown. Preserve the wording. "
         "Do not add commentary, invented headings, or a summary. If part of the image is cut "
         "off or unreadable, transcribe what is visible and do not guess at the rest."
@@ -85,7 +85,7 @@ def extract_jd_from_image(uploaded_file) -> str:
 def score_match(resume_text: str, job_description: str, target_role: str) -> dict:
     client = _get_client()
 
-    prompt = f"""You are a strict ATS (Applicant Tracking System) engine. Your job is to score resumes the way enterprise ATS software actually does — not the way a generous human recruiter would.
+    prompt = f"""You are a strict ATS (Applicant Tracking System) engine. Your job is to score resumes the way enterprise ATS software actually does, not the way a generous human recruiter would.
 
 IMPORTANT SCORING CALIBRATION:
 - 90-100: Resume could be submitted as-is. Near-perfect keyword and requirement match.
@@ -108,11 +108,11 @@ Analyze strictly. Only count requirements as met if they are explicitly and clea
 Return ONLY a JSON object. No preamble, no explanation, no markdown formatting. Just the raw JSON:
 {{
   "overall_score": <integer 0-100>,
-  "match_summary": "<2-3 sentence plain-English summary of the match — be direct about gaps>",
+  "match_summary": "<2-3 sentence plain-English summary of the match, being direct about gaps>",
   "matched_requirements": ["<requirement explicitly met in resume>", "..."],
   "missing_requirements": ["<requirement missing or only implied, not explicit>", "..."],
   "recommended_certs": ["<specific certification that would strengthen this application, with brief reason why>", "..."],
-  "recommended_actions": ["<specific action to improve this match — not cert-related, those go above>", "..."]
+  "recommended_actions": ["<specific action to improve this match, not cert-related; those go above>", "..."]
 }}
 
 For recommended_certs: only recommend certifications from real, verifiable professional organizations you are certain exist. Include the full certification name and the issuing organization. If you are not certain a certification body is real and established, omit it entirely. Never recommend certifications sourced from forums, Reddit, or community discussions. It is better to return fewer recommendations or an empty list than to recommend something that cannot be verified."""
@@ -142,9 +142,9 @@ JOB DESCRIPTION:
 
 Search for this company online. Look for official website, LinkedIn presence, Glassdoor reviews, any scam reports, whether job details match the company's actual business.
 
-Note: Job postings hosted on Workday, Greenhouse, Lever, iCIMS, BambooHR, ADP, or similar enterprise ATS platforms are strong green flags — these are paid enterprise systems that scammers do not use. A job description that appears cut off is NOT a red flag — it may simply be a display limit in our system. Focus on whether the company itself is real and legitimate, not on formatting of the posting.
+Note: Job postings hosted on Workday, Greenhouse, Lever, iCIMS, BambooHR, ADP, or similar enterprise ATS platforms are strong green flags: these are paid enterprise systems that scammers do not use. A job description that appears cut off is NOT a red flag; it may simply be a display limit in our system. Focus on whether the company itself is real and legitimate, not on formatting of the posting.
 
-After your research, return ONLY a JSON object — no other text:
+After your research, return ONLY a JSON object, no other text:
 {{
   "verdict": "<legitimate|suspicious|likely_scam>",
   "confidence": "<high|medium|low>",
@@ -212,7 +212,7 @@ def generate_critical_path(profile: dict, match_history: list) -> dict:
     match_summary = ""
     if match_history:
         for m in match_history[:5]:
-            match_summary += f"- {m['company']} — {m['role']}: {m['overall_score']}% match\n"
+            match_summary += f"- {m['company']} - {m['role']}: {m['overall_score']}% match\n"
             missing = json.loads(m['missing_reqs']) if m['missing_reqs'] else []
             certs = json.loads(m['recommended_certs']) if m['recommended_certs'] else []
             if missing:
@@ -232,7 +232,7 @@ RESUME SUMMARY:
 RECENT JOB MATCH ANALYSIS:
 {match_summary if match_summary else 'No match history yet.'}
 
-Build a critical path from their current state to their target role. Be specific — name exact skills, certifications, and actions. No generic advice.
+Build a critical path from their current state to their target role. Be specific: name exact skills, certifications, and actions. No generic advice.
 
 Return ONLY a JSON object. No preamble, no markdown:
 {{
@@ -249,12 +249,12 @@ Return ONLY a JSON object. No preamble, no markdown:
       "success_criteria": "<how you know this milestone is complete>"
     }}
   ],
-  "critical_certs": ["<cert name from verified professional organization — issuing body and reason it matters>", "..."],
+  "critical_certs": ["<cert name from verified professional organization: issuing body and reason it matters>", "..."],
   "estimated_timeline": "<total estimated time to reach target role>",
   "biggest_risk": "<the single biggest thing that could derail this path>"
 }}
 
-Include 4-6 milestones ordered by priority. Be honest about timeline — don't sugarcoat it.
+Include 4-6 milestones ordered by priority. Be honest about timeline; don't sugarcoat it.
 
 For critical_certs: only recommend certifications from established, verifiable professional organizations. Include the issuing organization name alongside the cert name. If you cannot confirm a certification body is real and established, omit it. Never fabricate certification bodies, acronyms, or programs sourced from forums or community discussions. Return an empty list rather than recommend something unverifiable."""
 
@@ -296,7 +296,7 @@ Gap Summary: {critical_path.get('gap_summary', '')}
 Estimated Timeline: {critical_path.get('estimated_timeline', '')}
 Biggest Risk: {critical_path.get('biggest_risk', '')}
 
-You know this person's background from their resume. Never say you don't have their profile — you do. Reference specific details from their resume when giving advice."""
+You know this person's background from their resume. Never say you don't have their profile; you do. Reference specific details from their resume when giving advice."""
 
     history = conversation_history + [{"role": "user", "content": user_message}]
 

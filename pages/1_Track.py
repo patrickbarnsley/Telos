@@ -25,7 +25,7 @@ def fmt_salary(lo, hi):
     if not lo and not hi:
         return None
     if lo and hi:
-        return f"${lo:,} – ${hi:,}"
+        return f"${lo:,} - ${hi:,}"
     if lo:
         return f"${lo:,}+"
     return f"Up to ${hi:,}"
@@ -185,7 +185,7 @@ with tab1:
             filtered_jobs = [j for j in filtered_jobs if j.get("career_path_id") == filter_path_id]
 
         for job in filtered_jobs:
-            with st.expander(f"**{job['company']}** — {job['role']} | {job['status'].replace('_', ' ').capitalize()}"):
+            with st.expander(f"**{job['company']}** - {job['role']} | {job['status'].replace('_', ' ').capitalize()}"):
                 col1, col2 = st.columns([4, 1])
 
                 with col1:
@@ -208,7 +208,7 @@ with tab1:
                             e_req_max = st.number_input("Requested Max", min_value=0, value=job.get("requested_salary_max") or 0, key=f"ermax_{job['id']}")
 
                         e_notes = st.text_area("Notes", value=job["notes"] or "")
-                        e_jd_text = st.text_area("Job Description", value=job.get("jd_text") or "", height=150, key=f"jd_{job['id']}", placeholder="Paste the job description here — it'll auto-load in Match.")
+                        e_jd_text = st.text_area("Job Description", value=job.get("jd_text") or "", height=150, key=f"jd_{job['id']}", placeholder="Paste the job description here, it'll auto-load in Match.")
 
                         current_path_id = job.get("career_path_id")
                         current_path_name = next((p["path_name"] for p in career_paths if p["id"] == current_path_id), "None")
@@ -274,7 +274,7 @@ with tab2:
         st.info("No company data yet. Add jobs in the Pipeline tab to see company profiles here.")
     else:
         for c in company_stats:
-            with st.expander(f"**{c['company']}** — {c['total_applications']} application(s) | Best match: {c['best_score'] or 'N/A'}%"):
+            with st.expander(f"**{c['company']}** - {c['total_applications']} application(s) | Best match: {c['best_score'] or 'N/A'}%"):
                 col1, col2, col3 = st.columns(3)
                 col1.metric("Applications", c['total_applications'])
                 col2.metric("Match Runs", c['total_match_runs'])

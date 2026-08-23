@@ -34,13 +34,13 @@ active_resume = next((v for v in resume_versions if v["is_active"] == 1), None)
 
 st.markdown("### Score a Job")
 
-job_options = {f"{j['company']} — {j['role']}": j for j in jobs}
+job_options = {f"{j['company']} - {j['role']}": j for j in jobs}
 selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
 selected_job = job_options[selected_job_label]
 saved_jd = selected_job.get("jd_text") or ""
 
 if saved_jd:
-    st.caption("✅ Loaded the description saved for this job in Track. You can edit it here for this score — your saved version won't change.")
+    st.caption("✅ Loaded the description saved for this job in Track. You can edit it here for this score; your saved version won't change.")
 else:
     st.caption("No description saved for this job yet. Paste one below, or add it in Track and it'll auto-load next time.")
 
@@ -49,7 +49,7 @@ with st.form("match_form"):
     st.caption("📏 Maximum 10,000 characters analyzed. Most job descriptions are well within this limit.")
 
     if resume_versions:
-        version_options = {f"{v['version_label']} — {v['resume_filename']}{'  ✅' if v['is_active'] else ''}": v for v in resume_versions}
+        version_options = {f"{v['version_label']} - {v['resume_filename']}{'  ✅' if v['is_active'] else ''}": v for v in resume_versions}
         default_idx = next((i for i, v in enumerate(resume_versions) if v["is_active"]), 0)
         selected_version_label = st.selectbox("Resume Version to Score", list(version_options.keys()), index=default_idx)
         selected_version = version_options[selected_version_label]
@@ -95,7 +95,7 @@ if submitted:
         elif verdict == "likely_scam":
             st.error(f"🚨 **Likely Scam** (Confidence: {confidence})")
         else:
-            st.info("ℹ️ **Check Unavailable** — could not complete company verification.")
+            st.info("ℹ️ **Check Unavailable**: could not complete company verification.")
 
         st.markdown(f"_{scam_result.get('summary', '')}_")
 
@@ -146,7 +146,7 @@ if submitted:
 
                 st.markdown("### Match Results")
 
-                st.info("ℹ️ **About this score:** Telos scores your resume the way a real ATS system would — strictly. Industry estimates suggest 70-75% of resumes are automatically rejected by ATS before a human ever sees them. A score below 70% means a real ATS may filter out your application. A score of 75%+ improves your chances of passing initial screening, but is not a guarantee.")
+                st.info("ℹ️ **About this score:** Telos scores your resume the way a real ATS system would: strictly. Industry estimates suggest 70-75% of resumes are automatically rejected by ATS before a human ever sees them. A score below 70% means a real ATS may filter out your application. A score of 75%+ improves your chances of passing initial screening, but is not a guarantee.")
 
                 if len(jd_text) > 10000:
                     st.warning(f"⚠️ Your job description was {len(jd_text):,} characters. Only the first 10,000 were analyzed.")
@@ -157,9 +157,9 @@ if submitted:
                 if score >= 75:
                     st.success(f"### {score}% Match")
                 elif score >= 60:
-                    st.warning(f"### {score}% Match — May be filtered by ATS")
+                    st.warning(f"### {score}% Match: May be filtered by ATS")
                 else:
-                    st.error(f"### {score}% Match — High risk of ATS rejection")
+                    st.error(f"### {score}% Match: High risk of ATS rejection")
 
                 st.markdown(f"**Summary:** {result['match_summary']}")
                 st.markdown("---")
@@ -178,7 +178,7 @@ if submitted:
 
                 if result.get("recommended_certs"):
                     st.markdown("### 🎓 Recommended Certifications")
-                    st.caption("⚠️ AI-generated — verify each certification exists before pursuing it.")
+                    st.caption("⚠️ AI-generated. Verify each certification exists before pursuing it.")
                     for cert in result["recommended_certs"]:
                         st.markdown(f"- {cert}")
                     st.markdown("---")
@@ -234,7 +234,7 @@ else:
         selected_ids = []
 
         for r in filtered_results:
-            label = f"{r.get('company', 'Unknown')} — {r.get('role', 'Unknown')}"
+            label = f"{r.get('company', 'Unknown')} - {r.get('role', 'Unknown')}"
             score = r["overall_score"]
             date = r["scored_at"]
             version = r.get("resume_version_label") or "Original"
@@ -274,7 +274,7 @@ else:
 
                     if certs:
                         st.markdown("**🎓 Recommended Certs**")
-                        st.caption("⚠️ AI-generated — verify before pursuing.")
+                        st.caption("⚠️ AI-generated. Verify before pursuing.")
                         for cert in certs:
                             st.markdown(f"- {cert}")
 

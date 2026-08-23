@@ -184,12 +184,12 @@ def quota_gate(tester_name: str, action: str) -> bool:
     if plan == "free":
         st.warning(
             f"**You've used all {limit} {label}s on the Free plan this month.** "
-            f"Your quota resets on the 1st. Pro raises this limit substantially — "
+            f"Your quota resets on the 1st. Pro raises this limit substantially. "
             f"it isn't taking payments yet, but you can join the waitlist on the home page."
         )
     else:
         st.warning(
-            f"**Monthly limit reached** — {used}/{limit} {label}s used on the "
+            f"**Monthly limit reached**: {used}/{limit} {label}s used on the "
             f"{PLANS[plan]['label']} plan. This resets on the 1st."
         )
     return False
@@ -201,7 +201,7 @@ def quota_caption(tester_name: str, action: str) -> str:
     if limit == UNLIMITED:
         return ""
     if tester_name == DEMO_TESTER:
-        return "Demo account — AI actions are pre-generated"
+        return "Demo account: AI actions are pre-generated"
     used = used_this_month(tester_name, action)
     label = ACTION_LABELS.get(action, action)
     return f"{used} of {limit} {label}s used this month · {PLANS[get_plan(tester_name)]['label']} plan"

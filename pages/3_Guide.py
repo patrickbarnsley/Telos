@@ -37,11 +37,11 @@ if "active_path_id" not in st.session_state:
 
 path_options = {"Master Roadmap (All Paths)": None}
 for p in main_paths:
-    path_options[f"🎯 {p['path_name']} — {p['target_role']}"] = p["id"]
+    path_options[f"🎯 {p['path_name']} - {p['target_role']}"] = p["id"]
 for p in sub_paths:
     parent = next((m for m in main_paths if m["id"] == p.get("parent_path_id")), None)
     parent_label = f" → {parent['path_name']}" if parent else ""
-    path_options[f"🛤️ {p['path_name']} — {p['target_role']}{parent_label}"] = p["id"]
+    path_options[f"🛤️ {p['path_name']} - {p['target_role']}{parent_label}"] = p["id"]
 
 selected_path_label = st.selectbox("Which path are you working on?", list(path_options.keys()))
 selected_path_id = path_options[selected_path_label]
@@ -122,7 +122,7 @@ if saved:
     for milestone in cp.get("milestones", []):
         order = milestone['order']
         is_complete = progress.get(order, False)
-        label = f"~~Milestone {order}: {milestone['title']}~~ ✅" if is_complete else f"Milestone {order}: {milestone['title']} — {milestone['timeline']}"
+        label = f"~~Milestone {order}: {milestone['title']}~~ ✅" if is_complete else f"Milestone {order}: {milestone['title']} ({milestone['timeline']})"
 
         with st.expander(label):
             completed = st.checkbox(
@@ -144,7 +144,7 @@ if saved:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("### 🎓 Critical Certifications")
-        st.caption("⚠️ AI-generated — verify each certification exists before pursuing it.")
+        st.caption("⚠️ AI-generated. Verify each certification exists before pursuing it.")
         for cert in cp.get("critical_certs", []):
             st.markdown(f"- {cert}")
     with col2:

@@ -29,7 +29,7 @@ communication across concurrent workstreams.
 
 EXPERIENCE
 
-Senior Business Analyst — Meridian Health Systems (2022-present)
+Senior Business Analyst, Meridian Health Systems (2022-present)
 - Lead analyst on a claims-platform migration affecting 40+ internal users
   across three departments.
 - Author functional requirements and acceptance criteria; run UAT cycles and
@@ -39,7 +39,7 @@ Senior Business Analyst — Meridian Health Systems (2022-present)
 - Built Excel and Power BI reporting that cut manual month-end reconciliation
   from two days to four hours.
 
-Business Analyst — Copley Insurance Group (2019-2022)
+Business Analyst, Copley Insurance Group (2019-2022)
 - Gathered requirements for policy administration enhancements.
 - Coordinated release validation across QA and operations.
 - Maintained the requirements traceability matrix for two annual releases.
@@ -48,7 +48,7 @@ EDUCATION
 B.S. Business Administration, University of Massachusetts
 
 CERTIFICATIONS
-Certified ScrumMaster (CSM), Scrum Alliance — 2023
+Certified ScrumMaster (CSM), Scrum Alliance, 2023
 
 SKILLS
 Requirements gathering, UAT coordination, stakeholder management, SQL
@@ -64,9 +64,9 @@ DEMO_JOBS = [
      "Applied via Greenhouse. No response yet."),
     ("Halcyon Software", "Project Manager, Professional Services", "applied", "Boston, MA", 95000, 115000, ""),
     ("Kestrel Analytics", "Senior Business Analyst", "offer", "Remote", 102000, 112000,
-     "Offer at 108k. Strong fit but lateral move — weighing against TPM roles."),
+     "Offer at 108k. Strong fit but lateral move; weighing against TPM roles."),
     ("Orion Payer Solutions", "Technical Project Manager", "rejected", "Waltham, MA", 110000, 130000,
-     "Rejected after screen — wanted 3+ years direct PM ownership."),
+     "Rejected after screen: wanted 3+ years direct PM ownership."),
     ("Lattice Health", "Implementation Consultant", "rejected", "Remote", 90000, 105000,
      "No response after 4 weeks, marked closed."),
     ("Sable Systems", "Program Manager", "applied", "Remote", 120000, 145000, ""),
@@ -75,10 +75,10 @@ DEMO_JOBS = [
     ("Arden Technologies", "Technical Project Manager", "applied", "Remote", 100000, 122000, ""),
     ("Pinnacle Care", "Business Systems Analyst", "rejected", "Remote", 88000, 100000, ""),
     ("Cobalt Logistics", "Project Coordinator", "applied", "Boston, MA", 72000, 85000,
-     "Backup option — below target band."),
+     "Backup option: below target band."),
 ]
 
-DEMO_JD = """Technical Project Manager — Northwind Health
+DEMO_JD = """Technical Project Manager, Northwind Health
 
 We are seeking a Technical Project Manager to lead cross-functional delivery of
 our provider-facing platform.
@@ -114,18 +114,18 @@ DEMO_MATCHES = [
             "Healthcare payer domain exposure",
         ],
         "missing": [
-            "Direct ownership of project budget — resume shows support, not ownership",
-            "Jira administration — Confluence is listed, Jira administration is not",
+            "Direct ownership of project budget: resume shows support, not ownership",
+            "Jira administration: Confluence is listed, Jira administration is not",
             "PMP certification (listed as preferred)",
             "Explicit schedule ownership for concurrent projects",
         ],
         "certs": [
-            "Project Management Professional (PMP), Project Management Institute — directly named as preferred and the clearest single lever on this score",
-            "PMI Agile Certified Practitioner (PMI-ACP), Project Management Institute — deepens the agile credential beyond CSM",
+            "Project Management Professional (PMP), Project Management Institute: directly named as preferred and the clearest single lever on this score",
+            "PMI Agile Certified Practitioner (PMI-ACP), Project Management Institute: deepens the agile credential beyond CSM",
         ],
         "actions": [
             "Rewrite the claims-migration bullet to lead with ownership language and name the schedule you held",
-            "Add a Jira line to skills if you administer workflows — currently only Confluence appears",
+            "Add a Jira line to skills if you administer workflows; currently only Confluence appears",
             "Quantify the 40+ user migration with a duration and a delivery date",
             "Mirror the phrase 'cross-functional delivery' from the posting into the summary line",
         ],
@@ -149,14 +149,14 @@ DEMO_MATCHES = [
             "Formal go-live / cutover leadership",
         ],
         "certs": [
-            "Certified Associate in Project Management (CAPM), Project Management Institute — a faster credential than PMP if the hours requirement is not yet met",
+            "Certified Associate in Project Management (CAPM), Project Management Institute: a faster credential than PMP if the hours requirement is not yet met",
         ],
         "actions": [
             "Reframe the vendor-coordination bullet as external-facing delivery",
             "Name the specific systems involved in the claims migration",
             "Add a cutover or go-live example if one exists",
         ],
-        "jd": "Implementation Manager — Vantage Clinical\n\nLead client implementations of our clinical data platform...",
+        "jd": "Implementation Manager, Vantage Clinical\n\nLead client implementations of our clinical data platform...",
     },
     {
         "company": "Beacon Data Systems", "role": "Technical Program Manager", "score": 58,
@@ -176,14 +176,14 @@ DEMO_MATCHES = [
             "Budget authority",
         ],
         "certs": [
-            "AWS Certified Cloud Practitioner, Amazon Web Services — entry-level credential that addresses the named infrastructure gap directly",
+            "AWS Certified Cloud Practitioner, Amazon Web Services: entry-level credential that addresses the named infrastructure gap directly",
         ],
         "actions": [
             "Deprioritize this posting relative to the TPM roles scoring above 70",
             "If pursuing this track, close the cloud-literacy gap before applying to similar roles",
             "Look for program-level scope in your current job to build the missing evidence",
         ],
-        "jd": "Technical Program Manager — Beacon Data Systems\n\nDrive complex, multi-team technical programs...",
+        "jd": "Technical Program Manager, Beacon Data Systems\n\nDrive complex, multi-team technical programs...",
     },
 ]
 
@@ -196,7 +196,7 @@ DEMO_PATH = {
                      "regulated-industry setting."),
     "gap_summary": ("Three gaps repeat across every match: no demonstrated budget or schedule ownership, no Jira "
                     "administration, and no PMP. The first is a framing problem as much as an experience problem "
-                    "— the work partially exists and is being described in the wrong register."),
+                    ". The work partially exists and is being described in the wrong register."),
     "milestones": [
         {
             "order": 1,
@@ -230,7 +230,7 @@ DEMO_PATH = {
             "order": 3,
             "title": "Close the PMP gap",
             "description": ("PMP appears as preferred on most target postings and required on the higher band. "
-                            "Verify hours eligibility first — CAPM is the fallback if you are short."),
+                            "Verify hours eligibility first; CAPM is the fallback if you are short."),
             "timeline": "90 days",
             "actions": [
                 "Audit your project hours against PMI's eligibility requirement",
@@ -267,8 +267,8 @@ DEMO_PATH = {
         },
     ],
     "critical_certs": [
-        "Project Management Professional (PMP), Project Management Institute — named on most target postings",
-        "PMI Agile Certified Practitioner (PMI-ACP), Project Management Institute — if the target market leans agile delivery",
+        "Project Management Professional (PMP), Project Management Institute: named on most target postings",
+        "PMI Agile Certified Practitioner (PMI-ACP), Project Management Institute: if the target market leans agile delivery",
     ],
     "estimated_timeline": "4-6 months to a competitive TPM application, assuming the resume rewrite happens this week.",
     "biggest_risk": ("Continuing to apply at the current volume without fixing the ownership framing first. "
@@ -374,7 +374,7 @@ def demo_banner():
     st.markdown(
         '<div style="background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.35);'
         'border-radius:8px;padding:11px 15px;margin-bottom:18px;font-size:14px;color:#E8E4DA;">'
-        '🔍 <strong>Demo account</strong> — fictional candidate, real product output. '
+        '🔍 <strong>Demo account</strong>: fictional candidate, real product output. '
         'Browsing is enabled; edits and new AI runs need a free account.</div>',
         unsafe_allow_html=True
     )

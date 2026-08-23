@@ -7,7 +7,7 @@ from core.plans import (get_plan, plan_label, join_waitlist, used_this_month,
                         limit_for, PLANS, MATCH, ROADMAP, UNLIMITED)
 
 st.set_page_config(
-    page_title="Telos — Run your job search like a campaign",
+    page_title="Telos: Run your job search like a campaign",
     page_icon="🎯",
     layout="wide"
 )
@@ -67,7 +67,7 @@ def waitlist_form():
             else:
                 try:
                     join_waitlist(wl_email, wl_note)
-                    st.success("You're on the list. Thanks — that note genuinely shapes what gets built.")
+                    st.success("You're on the list. Thanks. That note genuinely shapes what gets built.")
                 except Exception as e:
                     st.error(f"Couldn't save that: {e}")
 
@@ -140,7 +140,7 @@ if not st.session_state.user_email:
 
     st.markdown("---")
     st.markdown(
-        '<div class="footer">Telos — from the Greek for <em>ultimate purpose</em>. '
+        '<div class="footer">Telos, from the Greek for <em>ultimate purpose</em>. '
         'Built to help you find and reach yours.</div>',
         unsafe_allow_html=True
     )
@@ -181,10 +181,10 @@ else:
 st.markdown("---")
 st.markdown("### Where to next?")
 
-st.page_link("pages/0_Profile.py", label="👤  Profile — Upload your resume and set your target role")
-st.page_link("pages/1_Track.py", label="☑️  Track — Log every job and manage your pipeline")
-st.page_link("pages/2_Match.py", label="🎯  Match — Score your resume against any job description")
-st.page_link("pages/3_Guide.py", label="🗺️  Guide — Get your AI-powered critical path to your goal")
+st.page_link("pages/0_Profile.py", label="👤  Profile: Upload your resume and set your target role")
+st.page_link("pages/1_Track.py", label="☑️  Track: Log every job and manage your pipeline")
+st.page_link("pages/2_Match.py", label="🎯  Match: Score your resume against any job description")
+st.page_link("pages/3_Guide.py", label="🗺️  Guide: Get your AI-powered critical path to your goal")
 
 if is_demo():
     st.markdown("---")
@@ -203,7 +203,7 @@ elif show_waitlist:
 
 st.markdown("---")
 st.markdown(
-    '<div class="footer">Telos — from the Greek for <em>ultimate purpose</em>. '
+    '<div class="footer">Telos, from the Greek for <em>ultimate purpose</em>. '
     'Built to help you find and reach yours.</div>',
     unsafe_allow_html=True
 )

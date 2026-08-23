@@ -27,7 +27,7 @@ with tab1:
     if versions:
         for v in versions:
             is_active = v["is_active"] == 1
-            label = f"**{v['version_label']}** — {v['resume_filename']}"
+            label = f"**{v['version_label']}** - {v['resume_filename']}"
             if is_active:
                 label += " ✅ Active"
             with st.expander(label):
@@ -89,7 +89,7 @@ with tab1:
 
 with tab2:
     st.markdown("### Career Skill Tree")
-    st.markdown("Map out your career paths — set your overarching goals at the top and the routes you can take to get there.")
+    st.markdown("Map out your career paths: set your overarching goals at the top and the routes you can take to get there.")
 
     career_paths = get_career_paths(tester_name)
     main_paths = [p for p in career_paths if p["path_type"] == "main"]
@@ -98,7 +98,7 @@ with tab2:
     if main_paths:
         st.markdown("#### 🎯 Overarching Goals")
         for path in main_paths:
-            with st.expander(f"**{path['path_name']}** — {path['target_role']}"):
+            with st.expander(f"**{path['path_name']}** - {path['target_role']}"):
                 st.markdown(f"**Ultimate Target:** {path['target_role']}")
                 if path.get('goals'):
                     st.markdown(f"**Vision:** {path['goals']}")
@@ -117,7 +117,7 @@ with tab2:
         for path in sub_paths:
             parent = next((p for p in main_paths if p["id"] == path.get("parent_path_id")), None)
             parent_label = f" → leads to **{parent['path_name']}**" if parent else ""
-            with st.expander(f"**{path['path_name']}** — {path['target_role']}{parent_label}"):
+            with st.expander(f"**{path['path_name']}** - {path['target_role']}{parent_label}"):
                 st.markdown(f"**Target Role:** {path['target_role']}")
                 if path.get('goals'):
                     st.markdown(f"**Goals:** {path['goals']}")
@@ -161,7 +161,7 @@ with tab3:
 
     existing = get_profile(tester_name)
     if existing:
-        st.success(f"✅ Primary profile set — Target role: **{existing['target_role']}**")
+        st.success(f"✅ Primary profile set. Target role: **{existing['target_role']}**")
 
     with st.form("profile_form"):
         target_role = st.text_input(

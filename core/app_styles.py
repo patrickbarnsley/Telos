@@ -45,7 +45,7 @@ def show_help(page_name: str):
         if tester:
             st.markdown(f"👤 **Logged in as:** {tester}")
         st.markdown("---")
-        with st.expander("❓ Help — " + content["title"]):
+        with st.expander("❓ Help: " + content["title"]):
             for i, step in enumerate(content["steps"], 1):
                 st.markdown(f"**{i}.** {step}")
             st.markdown("---")
