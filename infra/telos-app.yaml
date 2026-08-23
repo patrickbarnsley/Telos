@@ -235,6 +235,21 @@ Resources:
             https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64
           chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 
+          # Compose v2 shells out to buildx for 'build', and the Amazon Linux
+          # docker package does not include it. Without this, 'docker compose
+          # up --build' fails with "compose build requires buildx 0.17.0 or
+          # later". The asset name carries the version, so the URL is resolved
+          # from the releases API rather than hardcoded.
+          BUILDX_URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest \
+                        | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
+          if [ -n "$BUILDX_URL" ]; then
+            curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-buildx "$BUILDX_URL"
+            chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+            docker buildx version || true
+          else
+            echo "WARNING: could not resolve a buildx download url"
+          fi
+
           mkdir -p /opt/telos/app
 
           # Pull secrets from Parameter Store into an env file the container reads.

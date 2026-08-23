@@ -110,6 +110,81 @@ function Require-HostedZone {
     return $id
 }
 
+function Invoke-RemoteScript {
+    <#
+      Runs a bash script on the instance via SSM Run Command.
+
+      The script is handed over through a --cli-input-json file rather than
+      inline --parameters. Anything non-trivial in bash contains quotes, and
+      routing those through PowerShell, then JSON, then the shell mangles them.
+      Building the payload as an object and letting ConvertTo-Json escape it
+      removes that whole class of problem.
+    #>
+    param(
+        [Parameter(Mandatory = $true)][string]$InstanceId,
+        [Parameter(Mandatory = $true)][string]$Script,
+        [int]$TimeoutSeconds = 900,
+        [int]$PollSeconds = 10,
+        [int]$MaxPolls = 120,
+        [string]$Label = 'Running remote script'
+    )
+
+    $payload = @{
+        InstanceIds    = @($InstanceId)
+        DocumentName   = 'AWS-RunShellScript'
+        TimeoutSeconds = $TimeoutSeconds
+        Parameters     = @{ commands = @($Script) }
+    } | ConvertTo-Json -Depth 6
+
+    $tmp = Join-Path $env:TEMP "ssm-$(Get-Random).json"
+    try {
+        [System.IO.File]::WriteAllText($tmp, $payload, (New-Object System.Text.UTF8Encoding($false)))
+
+        $cmdId = Aws ssm send-command --cli-input-json "file://$tmp" --query 'Command.CommandId' --output text
+        if ($LASTEXITCODE -ne 0 -or -not $cmdId) { throw 'Could not send the command to the instance.' }
+
+        Write-Host "  $Label" -NoNewline
+        $status = 'Pending'
+        for ($i = 0; $i -lt $MaxPolls; $i++) {
+            Start-Sleep -Seconds $PollSeconds
+            Write-Host '.' -NoNewline
+            $status = Aws ssm get-command-invocation --command-id $cmdId --instance-id $InstanceId `
+                          --query 'Status' --output text 2>&1
+            if ($status -in @('Success', 'Failed', 'TimedOut', 'Cancelled')) { break }
+        }
+        Write-Host ''
+
+        $out = Aws ssm get-command-invocation --command-id $cmdId --instance-id $InstanceId `
+                   --query 'StandardOutputContent' --output text 2>&1
+        $err = Aws ssm get-command-invocation --command-id $cmdId --instance-id $InstanceId `
+                   --query 'StandardErrorContent' --output text 2>&1
+
+        return [pscustomobject]@{ Status = $status; Output = $out; Error = $err }
+    }
+    finally { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+}
+
+$BuildxInstallScript = @'
+set -u
+if docker buildx version >/dev/null 2>&1; then
+  echo "buildx already installed"
+  docker buildx version
+  exit 0
+fi
+echo "buildx missing, installing"
+mkdir -p /usr/libexec/docker/cli-plugins
+URL=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest \
+        | grep -oE "https://[^\"]+buildx-v[0-9.]+\.linux-arm64" | head -1)
+if [ -z "$URL" ]; then
+  echo "could not resolve a buildx download url"
+  exit 1
+fi
+echo "downloading $URL"
+curl -fsSL -o /usr/libexec/docker/cli-plugins/docker-buildx "$URL"
+chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
+docker buildx version
+'@
+
 function Invoke-Release {
     <#
       Ships source to S3 and asks the instance to rebuild via SSM Run Command.
@@ -186,6 +261,18 @@ function Invoke-Release {
         Aws s3 cp $zipPath "s3://$bucket/app.zip"
         if ($LASTEXITCODE -ne 0) { throw 'Upload to S3 failed.' }
         Ok 'Uploaded'
+
+        # Compose v2 shells out to buildx for 'build', and the Amazon Linux docker
+        # package does not ship it. Install on demand rather than baking a
+        # UserData change that would replace the running instance.
+        Say 'Checking the build toolchain'
+        $bx = Invoke-RemoteScript -InstanceId $instance -Script $BuildxInstallScript `
+                  -TimeoutSeconds 300 -PollSeconds 6 -MaxPolls 40 -Label 'Ensuring buildx is present'
+        if ($bx.Status -ne 'Success') {
+            Warn $bx.Output; Warn $bx.Error
+            throw 'Could not install the buildx plugin on the instance.'
+        }
+        Ok ($bx.Output -split "`n" | Where-Object { $_ -match 'buildx' } | Select-Object -First 1)
 
         Say 'Building and restarting on the instance'
         $cmdId = Aws ssm send-command `
