@@ -61,7 +61,18 @@ function Get-AwsExe {
     return $script:AwsExe
 }
 
-function Aws { & (Get-AwsExe) @args --region $Region --profile $Profile }
+function Aws {
+    # $ErrorActionPreference is 'Stop' for this script, and in Windows PowerShell
+    # that promotes ANY stderr output from a native command into a terminating
+    # error. The AWS CLI writes to stderr routinely and harmlessly - looking up a
+    # parameter that does not exist yet, for instance - so that default would
+    # abort the script on entirely normal conditions. Success is judged by
+    # $LASTEXITCODE at each call site instead.
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try   { & (Get-AwsExe) @args --region $Region --profile $Profile }
+    finally { $ErrorActionPreference = $prev }
+}
 
 function Require-Tool {
     param($Name, $Hint)
@@ -75,7 +86,7 @@ function Require-Tool {
 function Get-StackOutput {
     param($Stack, $Key)
     $v = Aws cloudformation describe-stacks --stack-name $Stack `
-            --query "Stacks[0].Outputs[?OutputKey=='$Key'].OutputValue" --output text 2>$null
+            --query "Stacks[0].Outputs[?OutputKey=='$Key'].OutputValue" --output text 2>&1
     if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($v) -or $v -eq 'None') { return $null }
     return $v.Trim()
 }
@@ -200,7 +211,8 @@ switch ($Step) {
 
     foreach ($n in $names) {
         $path = "/telos/$($n.Key)"
-        $exists = $null -ne (Aws ssm get-parameter --name $path --query 'Parameter.Name' --output text 2>$null)
+        $null = Aws ssm get-parameter --name $path --query 'Parameter.Name' --output text 2>&1
+        $exists = ($LASTEXITCODE -eq 0)
         $label = if ($exists) { "$($n.Prompt) [already set]" } else { "$($n.Prompt) [not set]" }
         $secure = Read-Host -Prompt "  $label" -AsSecureString
         $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
@@ -210,6 +222,7 @@ switch ($Step) {
             continue
         }
         Aws ssm put-parameter --name $path --value $plain --type SecureString --overwrite | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "Failed to save $($n.Key) to Parameter Store." }
         Ok "$($n.Key) saved"
     }
 }
