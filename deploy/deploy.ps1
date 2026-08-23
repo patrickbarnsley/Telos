@@ -1,10 +1,10 @@
-<#
+﻿<#
 .SYNOPSIS
   Deploy Telos to AWS: a Graviton EC2 instance running Docker and Caddy, and
   the landing page on S3 + CloudFront.
 
 .DESCRIPTION
-  Run the steps in order. Each is idempotent — re-running is safe.
+  Run the steps in order. Each is idempotent; re-running is safe.
 
     .\deploy.ps1 -Step dns        # once; then point your registrar's nameservers
     .\deploy.ps1 -Step secrets    # once, and again whenever a secret changes
@@ -153,7 +153,7 @@ switch ($Step) {
     $ns = Get-StackOutput $DnsStack 'Nameservers'
     Ok "Hosted zone created for $Domain"
     Write-Host ''
-    Warn 'ACTION REQUIRED — set these four nameservers at your registrar:'
+    Warn 'ACTION REQUIRED - set these four nameservers at your registrar:'
     $ns -split ',\s*' | ForEach-Object { Write-Host "    $_" -ForegroundColor White }
     Write-Host ''
     Warn 'Then WAIT for propagation before running -Step site or -Step app.'
@@ -187,7 +187,7 @@ switch ($Step) {
         $plain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
                     [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
         if ([string]::IsNullOrWhiteSpace($plain)) {
-            if (-not $exists) { Warn "    $($n.Key) is still unset — the task will fail to start without it." }
+            if (-not $exists) { Warn "    $($n.Key) is still unset - the task will fail to start without it." }
             continue
         }
         Aws ssm put-parameter --name $path --value $plain --type SecureString --overwrite | Out-Null
