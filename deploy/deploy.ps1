@@ -162,7 +162,24 @@ function Invoke-Release {
         Get-ChildItem $staging -Recurse -Force -Include '__pycache__', '*.pyc', '.env', 'secrets.toml' |
             Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
-        Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zipPath -Force
+        # Compress-Archive is not usable here. Windows PowerShell 5.1 writes
+        # backslashes as the path separator inside the archive, which the ZIP
+        # spec forbids; Linux unzip warns and exits 1, and deploy.sh runs under
+        # set -e, so the whole deploy aborts. Building the archive through
+        # System.IO.Compression lets the entry names be set explicitly, with
+        # forward slashes.
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $archive = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
+        try {
+            $root = (Resolve-Path $staging).Path.TrimEnd('\')
+            foreach ($file in Get-ChildItem -Path $staging -Recurse -File -Force) {
+                $rel = $file.FullName.Substring($root.Length + 1).Replace('\', '/')
+                $null = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                            $archive, $file.FullName, $rel)
+            }
+        }
+        finally { $archive.Dispose() }
+
         $sizeKb = [math]::Round((Get-Item $zipPath).Length / 1KB)
         Ok "Bundle built ($sizeKb KB)"
 
