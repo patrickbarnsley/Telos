@@ -22,3 +22,10 @@ __pycache__/
 
 # Landing page, deployed straight to S3, deliberately kept out of the repo
 telos-site/
+
+# Secret bundles used by the deploy script. The -EnvFile flow asks you to write
+# real production credentials to a plain text file; if one of those ever lands
+# next to the repo, it must not be committable.
+telos-secrets.txt
+*secrets*.txt
+*.secrets
