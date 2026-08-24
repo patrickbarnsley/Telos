@@ -10,6 +10,15 @@ enableCORS = false
 enableXsrfProtection = true
 maxUploadSize = 10
 
+[client]
+# Users must never see a Python traceback. The default is "full", which renders
+# file paths, line numbers and library internals into the browser for anyone who
+# triggers an error; a database misconfiguration exposed the Supabase hostname
+# this way. "none" shows a generic message in the browser and keeps the full
+# detail in the container logs, where it belongs.
+showErrorDetails = "none"
+toolbarMode = "minimal"
+
 [browser]
 gatherUsageStats = false
 
