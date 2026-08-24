@@ -1,0 +1,26 @@
+# This repository is authored on Linux, checked out on Windows, and deployed to
+# Linux. Without this file, Git for Windows converts everything to CRLF on
+# checkout, and those carriage returns travel back to the EC2 host inside the
+# deploy bundle. A backslash line continuation followed by CRLF is a known
+# Dockerfile parse failure, and a CRLF in a shell script produces the
+# uninformative "$'\r': command not found".
+#
+# Normalize to LF in the repository, and check out LF for anything that will be
+# read by Linux.
+* text=auto eol=lf
+
+# PowerShell 5.1 is the exception, and the right rule for it is "do not touch".
+# deploy.ps1 is authored byte-exact: CRLF line endings, and a UTF-8 BOM, because
+# 5.1 reads a BOM-less UTF-8 file as ANSI and that is how a stray character broke
+# the deploy script earlier in this project. Marking it -text means git converts
+# nothing in either direction, so the checkout is byte-identical everywhere.
+# Marking it "text eol=crlf" instead would leave it permanently dirty, because
+# the stored blob already contains the CRLFs git would want to normalize away.
+*.ps1 -text
+
+# Never touched.
+*.png binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.bundle binary
