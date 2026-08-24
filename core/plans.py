@@ -53,6 +53,10 @@ PLANS = {
 
 DEMO_TESTER = "__demo__"
 
+# Shown wherever a user might need a human. A product that stores someone's
+# resume and cannot be contacted is not a product.
+SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "support@usetelosapp.com")
+
 
 def _owner_emails() -> set:
     """Emails that get an unmetered plan. Set OWNER_EMAILS as a comma-separated list."""

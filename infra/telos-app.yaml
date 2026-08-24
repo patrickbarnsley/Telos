@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Telos application — a single Graviton EC2 instance running Docker, with Caddy
+  Telos application, a single Graviton EC2 instance running Docker, with Caddy
   terminating TLS and proxying WebSockets.
 
   Why not ECS Fargate behind an ALB: that stack was built, measured, and costed
-  at ~$36.70/month, of which the load balancer alone was $17.43 — 47% of the
+  at ~$36.70/month, of which the load balancer alone was $17.43, 47% of the
   bill to balance a single container. This is ~$14.46/month for more RAM. The
   Fargate version is kept at infra/reference/telos-app-fargate.yaml along with
   the conditions that would justify going back to it.
@@ -30,7 +30,7 @@ Parameters:
     Default: t4g.small
     AllowedValues: [t4g.micro, t4g.small, t4g.medium]
     Description: >
-      t4g.small is 2 vCPU / 2 GB on Graviton — more memory than the Fargate task
+      t4g.small is 2 vCPU / 2 GB on Graviton, more memory than the Fargate task
       it replaces, for less money. t4g.micro (1 GB) will OOM once pandas,
       pdfplumber and Pillow are all resident.
   VolumeSizeGb:
@@ -41,7 +41,7 @@ Parameters:
   LatestAmi:
     Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64
-    Description: Resolved at deploy time — never a hardcoded AMI id.
+    Description: Resolved at deploy time, never a hardcoded AMI id.
 
 Resources:
 
@@ -139,6 +139,39 @@ Resources:
       VersioningConfiguration:
         Status: Enabled
 
+  # -------------------------------------------------------------- backup bucket
+  # Separate from the deploy bucket on purpose. Deploy artifacts are disposable
+  # and rotate weekly; these are the only copy of every user's data that Telos
+  # itself controls. Different contents, different lifecycle, different blast
+  # radius if something goes wrong with a policy.
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub 'telos-backups-${AWS::AccountId}'
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          # Dumps are small and infrequent, so a month of dailies costs cents.
+          - Id: ExpireDailyDumps
+            Status: Enabled
+            Prefix: db/
+            ExpirationInDays: 30
+            NoncurrentVersionExpirationInDays: 7
+          - Id: AbortIncompleteUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload: { DaysAfterInitiation: 1 }
+
   # -------------------------------------------------------------------- IAM
   InstanceRole:
     Type: AWS::IAM::Role
@@ -166,6 +199,15 @@ Resources:
               - Effect: Allow
                 Action: [s3:GetObject]
                 Resource: !Sub '${DeployBucket.Arn}/*'
+              # Write and read backups. Deliberately no s3:DeleteObject: a host
+              # that can erase its own backups is one bad script away from
+              # having none.
+              - Effect: Allow
+                Action: [s3:PutObject, s3:GetObject]
+                Resource: !Sub '${BackupBucket.Arn}/*'
+              - Effect: Allow
+                Action: [s3:ListBucket]
+                Resource: !GetAtt BackupBucket.Arn
 
   InstanceProfile:
     Type: AWS::IAM::InstanceProfile
@@ -268,10 +310,18 @@ Resources:
           REGION="${AWS::Region}"
           OUT=/opt/telos/.env
           : > "$OUT.tmp"
-          for KEY in ANTHROPIC_API_KEY DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY ADMIN_PASSWORD OWNER_EMAILS; do
+          # Optional keys are read the same way as required ones. A missing
+          # parameter yields an empty value and the app falls back to its
+          # default, so the AI budget or support address can be changed in
+          # Parameter Store and picked up on the next restart, with no deploy.
+          for KEY in ANTHROPIC_API_KEY DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY \
+                     ADMIN_PASSWORD OWNER_EMAILS SITE_URL SUPPORT_EMAIL \
+                     TELOS_AI_MONTHLY_CAP TELOS_AI_MODEL; do
             VALUE=$(aws ssm get-parameter --name "/telos/$KEY" --with-decryption \
                       --query 'Parameter.Value' --output text --region "$REGION" 2>/dev/null || echo "")
-            printf '%s=%s\n' "$KEY" "$VALUE" >> "$OUT.tmp"
+            if [ -n "$VALUE" ]; then
+              printf '%s=%s\n' "$KEY" "$VALUE" >> "$OUT.tmp"
+            fi
           done
           chmod 600 "$OUT.tmp"
           mv "$OUT.tmp" "$OUT"
@@ -353,6 +403,60 @@ Resources:
           systemctl daemon-reload
           systemctl enable telos.service
 
+          # Nightly database backup to S3. Supabase keeps its own backups, but
+          # those live in the Supabase account and follow Supabase's retention.
+          # This is the copy Telos controls, which is the one that survives
+          # losing access to that account.
+          dnf install -y postgresql16 || dnf install -y postgresql15 || true
+
+          cat > /opt/telos/backup.sh <<'BACKUP'
+          #!/bin/bash
+          set -euo pipefail
+          export TELOS_BACKUP_BUCKET="${BackupBucket}"
+          export AWS_DEFAULT_REGION="${AWS::Region}"
+          set -a; . /opt/telos/.env; set +a
+          STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+          DUMP="$WORK/telos-$STAMP.dump"
+
+          pg_dump --format=custom --no-owner --no-privileges --file="$DUMP" "$DATABASE_URL"
+          SIZE=$(stat -c%s "$DUMP")
+          # A dump this small is not a real database; refusing it stops a bad
+          # copy aging out the good ones.
+          if [ "$SIZE" -lt 10240 ]; then
+            echo "BACKUP FAILED: dump is only $SIZE bytes" >&2
+            exit 1
+          fi
+          pg_restore --list "$DUMP" >/dev/null
+          KEY="db/$(date -u +%Y/%m)/telos-$STAMP.dump"
+          aws s3 cp "$DUMP" "s3://$TELOS_BACKUP_BUCKET/$KEY" --storage-class STANDARD_IA --only-show-errors
+          aws s3api head-object --bucket "$TELOS_BACKUP_BUCKET" --key "$KEY" >/dev/null
+          echo "backup ok: s3://$TELOS_BACKUP_BUCKET/$KEY ($SIZE bytes)"
+          BACKUP
+          chmod +x /opt/telos/backup.sh
+
+          cat > /etc/systemd/system/telos-backup.service <<'BUNIT'
+          [Unit]
+          Description=Nightly Telos database backup to S3
+          [Service]
+          Type=oneshot
+          ExecStart=/opt/telos/backup.sh
+          BUNIT
+
+          cat > /etc/systemd/system/telos-backup.timer <<'BTIMER'
+          [Unit]
+          Description=Nightly Telos database backup
+          [Timer]
+          OnCalendar=*-*-* 08:15:00 UTC
+          RandomizedDelaySec=900
+          Persistent=true
+          [Install]
+          WantedBy=timers.target
+          BTIMER
+          systemctl daemon-reload
+          systemctl enable --now telos-backup.timer
+
           # Supabase pauses Free-plan projects after 7 days of low activity, which
           # would leave a visitor staring at a database error. One trivial query a
           # day keeps the project marked active. Costs nothing.
@@ -393,7 +497,7 @@ Resources:
           sed -i 's/^apply_updates.*/apply_updates = yes/' /etc/dnf/automatic.conf
           systemctl enable --now dnf-automatic.timer
 
-          echo "bootstrap complete — waiting for first deploy bundle"
+          echo "bootstrap complete, waiting for first deploy bundle"
 
 Outputs:
   AppUrl:
@@ -405,6 +509,11 @@ Outputs:
   InstanceId:
     Description: Use with SSM Session Manager and Run Command.
     Value: !Ref Instance
+  BackupBucketName:
+    Description: Bucket holding nightly database dumps
+    Value: !Ref BackupBucket
+    Export: { Name: !Sub '${AWS::StackName}-BackupBucket' }
+
   DeployBucketName:
     Value: !Ref DeployBucket
   SessionCommand:

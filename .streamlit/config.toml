@@ -1,12 +1,17 @@
-# Server settings for running behind an AWS Application Load Balancer.
+# Server settings for running behind Caddy on EC2.
 [server]
 headless = true
 port = 8501
 address = "0.0.0.0"
-# The ALB terminates TLS and forwards to the container over plain HTTP on the
-# same origin, so Streamlit's CORS check has nothing useful to protect and only
-# causes false rejections. XSRF protection stays ON.
-enableCORS = false
+
+# CORS stays ON. With it disabled Streamlit sends Access-Control-Allow-Origin: *
+# and, more seriously, accepts a WebSocket connection from any origin - and the
+# WebSocket is the whole application, not a side channel. XSRF protection does
+# not cover that, because opening a socket needs no token. This was set to false
+# for an Application Load Balancer that no longer exists; Caddy proxies from the
+# same origin, so there is nothing to relax.
+enableCORS = true
+corsAllowedOrigins = ["https://app.usetelosapp.com", "https://usetelosapp.com"]
 enableXsrfProtection = true
 maxUploadSize = 10
 

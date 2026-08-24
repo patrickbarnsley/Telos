@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Telos landing page — private S3 bucket served through CloudFront.
+  Telos landing page, private S3 bucket served through CloudFront.
 
   No GitHub involved: the page is uploaded straight to S3 by the deploy script.
   The bucket blocks all public access; CloudFront reaches it through an Origin
@@ -84,7 +84,7 @@ Resources:
     Properties:
       DistributionConfig:
         Enabled: true
-        Comment: !Sub 'Telos landing page — ${DomainName}'
+        Comment: !Sub 'Telos landing page, ${DomainName}'
         DefaultRootObject: index.html
         HttpVersion: http2and3
         IPV6Enabled: true

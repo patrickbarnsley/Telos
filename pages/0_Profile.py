@@ -1,10 +1,13 @@
+import json
 import streamlit as st
 from core.app_styles import apply_theme, show_help
 from core.database import save_profile, get_profile, create_career_path, get_career_paths, delete_career_path, save_resume_version, get_resume_versions, set_active_resume, delete_resume_version, get_active_resume
 from core.models import Profile
 from core.ai_engine import extract_resume_text
-from core.auth import require_login
+from core.auth import require_login, delete_account, forget_session
+from core.database import export_user_data, purge_user_data, revoke_all_sessions
 from core.demo import demo_banner
+from core.errors import show as show_error, friendly
 
 apply_theme()
 
@@ -15,7 +18,7 @@ require_login()
 tester_name = st.session_state.tester_name
 demo_banner()
 
-tab1, tab2, tab3 = st.tabs(["Resumes", "Career Paths", "Legacy Profile"])
+tab1, tab2, tab3, tab4 = st.tabs(["Resumes", "Career Paths", "Target Role", "Account"])
 
 with tab1:
     st.markdown("### Resume Versions")
@@ -84,8 +87,8 @@ with tab1:
                             save_profile(profile, tester_name)
                         st.success(f"Resume '{version_label}' uploaded successfully!")
                         st.rerun()
-                    except ValueError as e:
-                        st.error(str(e))
+                    except Exception as e:
+                        show_error(e, "reading your resume")
 
 with tab2:
     st.markdown("### Career Skill Tree")
@@ -156,8 +159,8 @@ with tab2:
                 st.rerun()
 
 with tab3:
-    st.markdown("### Legacy Profile")
-    st.markdown("Your primary target role used by Guide when no specific career path is selected.")
+    st.markdown("### Target Role")
+    st.markdown("Your primary target role, used by Guide when no specific career path is selected.")
 
     existing = get_profile(tester_name)
     if existing:
@@ -189,5 +192,84 @@ with tab3:
                 save_profile(profile, tester_name)
                 st.success("Profile saved!")
                 st.rerun()
+
+
+with tab4:
+    from core.demo import is_demo, blocked
+    from core.plans import SUPPORT_EMAIL, plan_label
+
+    st.markdown("### Your account")
+    if is_demo():
+        st.info("The demo account is shared and read only. Create a free account to manage your own data.")
+    else:
+        st.markdown(f"**{st.session_state.get('user_email', tester_name)}**  \n{plan_label(tester_name)} plan")
+
+    st.markdown("---")
+    st.markdown("#### Take your data with you")
+    st.markdown(
+        "Everything you have put into Telos, as one JSON file: jobs, notes, profile, "
+        "resume versions, career paths, match scores and roadmap progress. No lock-in."
+    )
+    if st.button("Prepare my data export", disabled=is_demo()):
+        try:
+            bundle = export_user_data(tester_name)
+            st.session_state["export_bundle"] = json.dumps(bundle, indent=2, default=str)
+            st.session_state["export_counts"] = {k: len(v) for k, v in bundle.items() if isinstance(v, list)}
+        except Exception:
+            st.error(f"Export failed. Email {SUPPORT_EMAIL} and we will send it to you by hand.")
+
+    if st.session_state.get("export_bundle"):
+        counts = st.session_state.get("export_counts", {})
+        summary = ", ".join(f"{v} {k.replace('_', ' ')}" for k, v in counts.items() if v)
+        st.caption(f"Ready: {summary}" if summary else "Ready. Your account is currently empty.")
+        st.download_button(
+            "Download telos-export.json",
+            data=st.session_state["export_bundle"],
+            file_name="telos-export.json",
+            mime="application/json",
+        )
+
+    st.markdown("---")
+    st.markdown("#### Sign out everywhere")
+    st.markdown("Ends every remembered session, including on devices you no longer have.")
+    if st.button("Sign out of all devices", disabled=is_demo()):
+        revoke_all_sessions(tester_name)
+        st.session_state.user_email = ""
+        st.session_state.tester_name = ""
+        st.session_state.session_token = ""
+        st.query_params.clear()
+        st.rerun()
+
+    st.markdown("---")
+    st.markdown("#### Delete this account")
+    st.markdown(
+        "This erases every row Telos holds for you: jobs, profile, resumes, paths, matches "
+        "and roadmap. It cannot be undone, and we keep no backup copy of your data afterwards. "
+        "Export first if you want a record."
+    )
+    with st.expander("I want to delete my account"):
+        confirm = st.text_input('Type DELETE to confirm', key="del_confirm")
+        st.caption("We ask you to type it so this cannot happen with one stray click.")
+        if st.button("Permanently delete my account", type="primary", disabled=is_demo()):
+            if blocked("Account deletion"):
+                pass
+            elif confirm.strip().upper() != "DELETE":
+                st.error("Type DELETE in the box above to confirm.")
+            else:
+                result = delete_account(tester_name)
+                if result.get("ok"):
+                    token = st.session_state.get("session_token")
+                    if token:
+                        forget_session(token)
+                    st.session_state.clear()
+                    st.query_params.clear()
+                    st.success(
+                        "Your data is gone. The sign-in record itself is removed on our side "
+                        f"within 30 days; email {SUPPORT_EMAIL} if you want that confirmed."
+                    )
+                    st.stop()
+                else:
+                    st.error(f"Deletion failed. Email {SUPPORT_EMAIL} and we will do it manually.")
+
 
 show_help("Profile")

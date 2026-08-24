@@ -2,7 +2,7 @@
 
 > *Telos is the Greek word for ultimate purpose. The app helps you find and reach yours.*
 
-**[usetelosapp.com](https://usetelosapp.com)** · **[Live demo — no signup](https://app.usetelosapp.com/?demo=1)** · **[Product case study](CASE-STUDY.md)**
+**[usetelosapp.com](https://usetelosapp.com)** · **[Live demo, no signup](https://app.usetelosapp.com/?demo=1)** · **[Product case study](CASE-STUDY.md)**
 
 Telos is a career campaign system for job seekers. Track every application, score your
 resume against any job description with AI, and get a specific path to the role you
@@ -14,7 +14,7 @@ actually want.
 
 My wife went through a job transition and couldn't tell me which jobs had rejected her,
 where she stood with any of them, or whether she was making progress. She was losing
-confidence — not because she wasn't qualified, but because she had no system and no signal.
+confidence, not because she wasn't qualified, but because she had no system and no signal.
 
 Plenty of people manage complex projects and pipelines all day at work, then run the
 highest-stakes campaign of their life out of a spreadsheet and memory. Telos gives that
@@ -29,7 +29,7 @@ running myself.
 ## What it does
 
 ### Track
-Log every job you're pursuing and move it through the pipeline — applied, screening,
+Log every job you're pursuing and move it through the pipeline, applied, screening,
 interview, offer, rejected, withdrawn. Notes, contacts, posted vs. requested salary, and
 the job description all live on the record. Funnel metrics update as you go.
 
@@ -40,7 +40,7 @@ certifications would close the gap. Telos also researches the employer and flags
 scams before you spend time on an application.
 
 ### Guide
-Get an ordered critical path from where you are to your target role — milestones with
+Get an ordered critical path from where you are to your target role, milestones with
 timelines, concrete actions, and success criteria, built from your resume, your goals,
 and your actual match history. An advisor chat lets you drill into any part of it.
 
@@ -57,14 +57,14 @@ no central database, no infrastructure bill, and users owned their own data.
 **It was the wrong call, and the evidence was unambiguous.** Almost nobody who wanted to
 use Telos got as far as using it. "Create an Anthropic account, generate an API key, fork
 a repo, deploy it" is four steps of friction in front of a product whose value you can't
-see until step five. The people it was built for — job seekers, mid-search, already
-stressed — were exactly the people least willing to spend an evening on deployment.
+see until step five. The people it was built for, job seekers, mid-search, already
+stressed, were exactly the people least willing to spend an evening on deployment.
 
 **So the model changed.** Telos is now hosted, with accounts, a shared database, and the
 AI cost absorbed on my side. Users sign up and it works.
 
-What I'd take from it: I optimised v1 for *my* costs — build time, infrastructure, API
-spend — and called it a user benefit. Data ownership was a real advantage, but it was
+What I'd take from it: I optimised v1 for *my* costs, build time, infrastructure, API
+spend, and called it a user benefit. Data ownership was a real advantage, but it was
 solving a problem my users didn't have yet, at the price of the one they did.
 
 ### Why the free tier is metered rather than unlimited
@@ -80,7 +80,7 @@ A hiring manager or a curious job seeker shouldn't have to create an account to 
 what the product does. The demo account is fully populated with a fictional candidate's
 pipeline, real match output, and a real roadmap. It costs nothing to serve because the AI
 output is pre-generated and every write is blocked at the database layer, not at the
-button — a single choke point rather than trusting each UI path to check.
+button, a single choke point rather than trusting each UI path to check.
 
 ### Why Match requires a linked job
 
@@ -103,15 +103,15 @@ match history stays clean enough to be worth analysing later.
 
 ## Pricing
 
-| | Free | Pro — $9/mo |
+| | Free | Pro, $19/mo |
 |---|---|---|
 | Job tracking | Unlimited | Unlimited |
 | Pipeline metrics | Unlimited | Unlimited |
 | AI match scores | 10 / month | 200 / month |
 | Career roadmaps | 1 / month | 10 / month |
-| Advisor chat | — | Unlimited |
+| Advisor chat | Not included | Unlimited |
 | Employer scam checks | 10 / month | 200 / month |
-| Outcome analytics | — | Included |
+| Outcome analytics | Not included | Included |
 
 Pro is not taking payments yet. It exists as a defined tier with a waitlist so that
 demand can be measured before payment infrastructure is built.
@@ -131,7 +131,7 @@ telos/
 │   └── 4_Admin.py          # Usage analytics and outcome correlation
 ├── core/
 │   ├── database.py         # All Postgres access; demo write-guard
-│   ├── ai_engine.py        # Claude API wrapper — the only Claude-aware file
+│   ├── ai_engine.py        # Claude API wrapper, the only Claude-aware file
 │   ├── auth.py             # Supabase email/password
 │   ├── plans.py            # Tiers, usage metering, quota enforcement
 │   ├── demo.py             # Read-only demo account and seed data
@@ -165,7 +165,7 @@ boundary. Swapping providers is a one-file change. That was intentional from day
 ### Data access
 
 Every read and write in `database.py` is scoped to its owner. A row ID alone is never
-sufficient to reach a row — `get_job(job_id, tester_name)`, not `get_job(job_id)` — so
+sufficient to reach a row, `get_job(job_id, tester_name)`, not `get_job(job_id)`, so
 that the boundary holds when the data layer is eventually put behind an HTTP API.
 
 ---
@@ -181,27 +181,59 @@ that the boundary holds when the data layer is eventually put behind an HTTP API
   `.env`, never in the repository.
 - HTTPS is enforced by the host.
 - AI usage is metered per account, so a single user cannot run up an unbounded bill.
+- A second, global ceiling caps total AI spend per calendar month across all users.
+  Every API call passes through one wrapper that checks the ceiling before the request
+  and records the real token cost after it, so a new feature cannot forget to check.
+- Sessions are stored as hashes. A copy of the database does not let anyone sign in as
+  a user.
+- The password reset flow never reveals whether an address has an account. Confirming
+  that would tell anyone who asks that a given person is job hunting.
+- Errors shown to users are written messages, never stack traces. Tracebacks and the
+  database hostname stay in the server log.
 
 **Honest limitations**
 
 - Data is not encrypted at rest beyond what the managed Postgres provider does by default.
 - There is no formal security audit. This is a solo project.
 - The demo account is shared by every anonymous visitor by design. Nothing in it is real.
+- Deleting an account erases every application row immediately. The authentication
+  record itself is removed separately, because the app holds only a public key and
+  cannot delete it directly.
 
 ---
 
 ## Roadmap
 
-**Next** — payments for Pro once the waitlist justifies it; AI resume tailoring per job
+**Next**: payments for Pro once the waitlist justifies it; AI resume tailoring per job
 description; multi-resume comparison against a single posting.
 
-**Later** — a React + FastAPI rebuild on AWS (App Runner, Amplify, S3, Cognito, Bedrock),
+**Later**: a React + FastAPI rebuild on AWS (App Runner, Amplify, S3, Cognito, Bedrock),
 gated on the hosted version validating demand first. Building that infrastructure before
 the product earns it would be premature scaling, and the current stack has not yet become
 the constraint.
 
-**Someday** — browser extension for capturing listings; community and peer accountability;
+**Someday**: browser extension for capturing listings; community and peer accountability;
 aggregated anonymised success-path data by role.
+
+---
+
+## Testing
+
+```bash
+DATABASE_URL=postgresql://user:pass@host/scratch_db python3 tests/run_all.py
+```
+
+145 checks across six suites: database and quota behaviour, page rendering for every
+account type, admin access control, the auth flows, data export and deletion, and AI
+cost accounting.
+
+They run against a real PostgreSQL database rather than a mock, because the properties
+most worth testing here are enforced in SQL: that a query scoped to one account cannot
+return another account's rows, that deletion is transactional, that quota counting is
+correct at the boundary. A mocked database would pass every one of those while the real
+one leaked data between users.
+
+The suites delete rows. Point `DATABASE_URL` at a scratch database.
 
 ---
 

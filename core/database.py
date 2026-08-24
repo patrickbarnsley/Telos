@@ -169,6 +169,16 @@ def init_db():
     """)
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            token_hash TEXT PRIMARY KEY,
+            tester_name TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMPTZ NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_sessions_user ON user_sessions (tester_name)")
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_plans (
             tester_name TEXT PRIMARY KEY,
             plan TEXT NOT NULL DEFAULT 'free',
@@ -185,6 +195,20 @@ def init_db():
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_usage_lookup ON usage_events (tester_name, action, created_at)")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ai_spend (
+            id SERIAL PRIMARY KEY,
+            model TEXT,
+            action TEXT,
+            tester_name TEXT,
+            input_tokens INTEGER NOT NULL DEFAULT 0,
+            output_tokens INTEGER NOT NULL DEFAULT 0,
+            cost_usd NUMERIC(10, 6) NOT NULL DEFAULT 0,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_spend_month ON ai_spend (created_at)")
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS waitlist (
@@ -647,3 +671,121 @@ def get_usage_over_time() -> list:
     cursor.close()
     conn.close()
     return [dict(row) for row in rows]
+
+# ---------------------------------------------------------------- sessions
+#
+# Streamlit discards session_state on browser refresh, so a login that lives
+# only there logs the user out every time they reload. These store a hash of a
+# random token; the token itself travels in the URL and is never persisted, so
+# a database leak cannot be replayed as a login.
+
+def store_session_token(tester_name: str, token_hash: str, days: int = 30):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_sessions WHERE expires_at < NOW()")
+    cursor.execute(
+        """INSERT INTO user_sessions (token_hash, tester_name, expires_at)
+           VALUES (%s, %s, NOW() + (%s || ' days')::interval)
+           ON CONFLICT (token_hash) DO NOTHING""",
+        (token_hash, tester_name, str(days)),
+    )
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def lookup_session_token(token_hash: str):
+    """Return the account a live token belongs to, or None."""
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT tester_name FROM user_sessions WHERE token_hash = %s AND expires_at > NOW()",
+        (token_hash,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row[0] if row else None
+
+
+def revoke_session_token(token_hash: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_sessions WHERE token_hash = %s", (token_hash,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def revoke_all_sessions(tester_name: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_sessions WHERE tester_name = %s", (tester_name,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+# ----------------------------------------------------------------- deletion
+#
+# A person can ask for everything held about them to be erased, and the privacy
+# policy promises it. This is that promise in code: every table that carries a
+# tester_name, emptied in one transaction, with a count returned so the user is
+# shown what actually went.
+
+USER_TABLES = [
+    "jobs", "profile", "resume_versions", "career_paths", "match_results",
+    "guide_progress", "critical_path", "user_plans", "usage_events", "user_sessions",
+]
+
+
+def purge_user_data(tester_name: str) -> dict:
+    """Delete every row belonging to this account. Returns rows removed per table."""
+    if not tester_name:
+        raise ValueError("purge_user_data requires an account")
+
+    conn = get_connection()
+    cursor = conn.cursor()
+    removed = {}
+    try:
+        for table in USER_TABLES:
+            cursor.execute(f"DELETE FROM {table} WHERE tester_name = %s", (tester_name,))
+            removed[table] = cursor.rowcount
+
+        # ai_spend is a financial record, not user content: it is how the AI bill
+        # is reconciled, so the rows have to survive. Cutting the name off them
+        # removes the person from the record while keeping the money in it.
+        cursor.execute(
+            "UPDATE ai_spend SET tester_name = '' WHERE tester_name = %s",
+            (tester_name,),
+        )
+        removed["ai_spend_anonymized"] = cursor.rowcount
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        cursor.close()
+        conn.close()
+    return removed
+
+
+def export_user_data(tester_name: str) -> dict:
+    """Everything held about an account, for the user to download.
+
+    The other half of a deletion right: a person is entitled to see what is held
+    before deciding to remove it.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    out = {}
+    try:
+        for table in USER_TABLES:
+            if table == "user_sessions":
+                continue  # tokens are not the user's data to export
+            cursor.execute(f"SELECT * FROM {table} WHERE tester_name = %s", (tester_name,))
+            out[table] = [dict(r) for r in cursor.fetchall()]
+    finally:
+        cursor.close()
+        conn.close()
+    return out

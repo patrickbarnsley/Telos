@@ -360,16 +360,26 @@ switch ($Step) {
 'secrets' {
     Say 'Writing application secrets to SSM Parameter Store'
 
+    # Required: the app will not start without these.
     $keys = @('ANTHROPIC_API_KEY', 'DATABASE_URL', 'SUPABASE_URL',
               'SUPABASE_ANON_KEY', 'ADMIN_PASSWORD', 'OWNER_EMAILS')
 
+    # Optional: each has a sane default in code. They live in Parameter Store so
+    # the AI budget or the model tier can be changed and picked up on the next
+    # restart, without editing code or redeploying.
+    $optionalKeys = @('SITE_URL', 'SUPPORT_EMAIL', 'TELOS_AI_MONTHLY_CAP', 'TELOS_AI_MODEL')
+
     $prompts = @{
-        ANTHROPIC_API_KEY = 'Anthropic API key'
-        DATABASE_URL      = 'Postgres connection string (Supabase)'
-        SUPABASE_URL      = 'Supabase project URL'
-        SUPABASE_ANON_KEY = 'Supabase anon/publishable key'
-        ADMIN_PASSWORD    = 'Admin page password'
-        OWNER_EMAILS      = 'Your email (unmetered AI usage)'
+        ANTHROPIC_API_KEY    = 'Anthropic API key'
+        DATABASE_URL         = 'Postgres connection string (Supabase)'
+        SUPABASE_URL         = 'Supabase project URL'
+        SUPABASE_ANON_KEY    = 'Supabase anon/publishable key'
+        ADMIN_PASSWORD       = 'Admin page password'
+        OWNER_EMAILS         = 'Your email (unmetered AI usage)'
+        SITE_URL             = 'App URL used in confirmation and reset emails'
+        SUPPORT_EMAIL        = 'Support address shown to users'
+        TELOS_AI_MONTHLY_CAP = 'Hard monthly AI budget in USD (default 40)'
+        TELOS_AI_MODEL       = 'Claude model id (default claude-opus-4-5)'
     }
 
     function Save-Secret {
@@ -392,7 +402,7 @@ switch ($Step) {
             if ($t -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
                 $k = $matches[1].Trim()
                 $v = $matches[2].Trim().Trim('"').Trim("'")
-                if ($keys -contains $k -and $v) { $found[$k] = $v }
+                if (($keys -contains $k -or $optionalKeys -contains $k) -and $v) { $found[$k] = $v }
             }
         }
 
@@ -401,6 +411,9 @@ switch ($Step) {
         foreach ($k in $keys) {
             if ($found.ContainsKey($k)) { Save-Secret $k $found[$k] }
             else { Warn "$k not in file - the app will not start without it" }
+        }
+        foreach ($k in $optionalKeys) {
+            if ($found.ContainsKey($k)) { Save-Secret $k $found[$k] }
         }
 
         Write-Host ''
@@ -455,13 +468,32 @@ switch ($Step) {
         --template-file (Join-Path $RepoRoot 'infra\telos-site.yaml') `
         --parameter-overrides "DomainName=$Domain" "HostedZoneId=$zone"
 
-    $bucket = Get-StackOutput $SiteStack 'BucketName'
-    $dist   = Get-StackOutput $SiteStack 'DistributionId'
-    $page   = Join-Path $RepoRoot 'telos-site\index.html'
+    $bucket  = Get-StackOutput $SiteStack 'BucketName'
+    $dist    = Get-StackOutput $SiteStack 'DistributionId'
+    $siteDir = Join-Path $RepoRoot 'telos-site'
+    $page    = Join-Path $siteDir 'index.html'
     if (-not (Test-Path $page)) { throw "Landing page not found at $page" }
 
-    Say 'Uploading index.html'
-    Aws s3 cp $page "s3://$bucket/index.html" --content-type 'text/html; charset=utf-8' --cache-control 'public, max-age=300'
+    # Each file gets the content type and cache lifetime that suits it. HTML is
+    # kept short-lived so a copy fix is live in minutes; images and the icon are
+    # cached hard because they change by filename, not in place.
+    $uploads = @(
+        @{ Name = 'index.html';           Type = 'text/html; charset=utf-8';  Cache = 'public, max-age=300' },
+        @{ Name = 'privacy.html';         Type = 'text/html; charset=utf-8';  Cache = 'public, max-age=300' },
+        @{ Name = 'terms.html';           Type = 'text/html; charset=utf-8';  Cache = 'public, max-age=300' },
+        @{ Name = 'robots.txt';           Type = 'text/plain; charset=utf-8'; Cache = 'public, max-age=3600' },
+        @{ Name = 'sitemap.xml';          Type = 'application/xml';           Cache = 'public, max-age=3600' },
+        @{ Name = 'favicon.svg';          Type = 'image/svg+xml';             Cache = 'public, max-age=86400' },
+        @{ Name = 'og-image.png';         Type = 'image/png';                 Cache = 'public, max-age=86400' },
+        @{ Name = 'apple-touch-icon.png'; Type = 'image/png';                 Cache = 'public, max-age=86400' }
+    )
+
+    foreach ($u in $uploads) {
+        $local = Join-Path $siteDir $u.Name
+        if (-not (Test-Path $local)) { Warn "Skipping $($u.Name): not found"; continue }
+        Say "Uploading $($u.Name)"
+        Aws s3 cp $local "s3://$bucket/$($u.Name)" --content-type $u.Type --cache-control $u.Cache
+    }
     Ok "Uploaded to $bucket"
 
     Say 'Invalidating the CloudFront cache'

@@ -6,6 +6,7 @@ from core.ai_engine import generate_critical_path, chat_with_advisor
 from core.auth import require_login
 from core.demo import demo_banner
 from core.plans import quota_gate, record_usage, ROADMAP, ADVISOR
+from core.errors import show as show_error, friendly
 
 apply_theme()
 
@@ -95,7 +96,7 @@ with col2:
                 st.session_state.chat_history[selected_path_id] = []
                 st.rerun()
             except Exception as e:
-                st.error(f"Something went wrong: {str(e)}")
+                show_error(e, "building your roadmap")
 
 saved = get_critical_path(tester_name, selected_path_id)
 if saved:
@@ -207,7 +208,7 @@ if saved:
                             st.rerun()
 
                 except Exception as e:
-                    st.error(f"Something went wrong: {str(e)}")
+                    show_error(e, "talking to your advisor")
 
 else:
     st.markdown("---")

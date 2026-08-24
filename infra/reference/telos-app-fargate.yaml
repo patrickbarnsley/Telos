@@ -1,8 +1,8 @@
 # ============================================================================
-# NOT IN USE — kept deliberately as the record of a costed decision.
+# NOT IN USE, kept deliberately as the record of a costed decision.
 #
 # This stack works. It was measured at ~$36.70/month, of which the Application
-# Load Balancer alone was $17.43 — 47% of the bill, to load-balance a single
+# Load Balancer alone was $17.43, 47% of the bill, to load-balance a single
 # container. For a portfolio app with one task behind it, that is the wrong
 # trade, so the live stack is now infra/telos-app.yaml: one Graviton EC2
 # instance running Docker and Caddy at ~$14.46/month.
@@ -16,7 +16,7 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Telos application — ECS Fargate behind an Application Load Balancer.
+  Telos application, ECS Fargate behind an Application Load Balancer.
 
   Why ALB and not App Runner: Streamlit talks to the browser over a WebSocket.
   App Runner does not proxy WebSockets, so the app loads a spinner and never

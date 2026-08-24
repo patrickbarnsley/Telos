@@ -6,6 +6,7 @@ from core.ai_engine import score_match, check_company_legitimacy
 from core.auth import require_login
 from core.demo import demo_banner
 from core.plans import quota_gate, quota_caption, record_usage, check_quota, MATCH, SCAM_CHECK
+from core.errors import show as show_error, friendly
 
 apply_theme()
 
@@ -34,9 +35,14 @@ active_resume = next((v for v in resume_versions if v["is_active"] == 1), None)
 
 st.markdown("### Score a Job")
 
-job_options = {f"{j['company']} - {j['role']}": j for j in jobs}
-selected_job_label = st.selectbox("Select a job from your tracker", list(job_options.keys()))
-selected_job = job_options[selected_job_label]
+# Select on the record itself rather than on a label string. Two applications
+# to the same company and role are common, and a label-keyed dict silently
+# collapses them so one of the two becomes unreachable.
+selected_job = st.selectbox(
+    "Select a job from your tracker",
+    jobs,
+    format_func=lambda j: f"{j['company']} - {j['role']}",
+)
 saved_jd = selected_job.get("jd_text") or ""
 
 if saved_jd:
@@ -49,10 +55,18 @@ with st.form("match_form"):
     st.caption("📏 Maximum 10,000 characters analyzed. Most job descriptions are well within this limit.")
 
     if resume_versions:
-        version_options = {f"{v['version_label']} - {v['resume_filename']}{'  ✅' if v['is_active'] else ''}": v for v in resume_versions}
+        # Same reasoning as the job selector above, and here the collapse was a
+        # crash rather than a nuisance: two versions sharing a label left the
+        # dict shorter than the list the default index was computed against,
+        # and Streamlit rejects an index past the end of the options.
         default_idx = next((i for i, v in enumerate(resume_versions) if v["is_active"]), 0)
-        selected_version_label = st.selectbox("Resume Version to Score", list(version_options.keys()), index=default_idx)
-        selected_version = version_options[selected_version_label]
+        selected_version = st.selectbox(
+            "Resume Version to Score",
+            resume_versions,
+            index=default_idx,
+            format_func=lambda v: f"{v['version_label']} - {v['resume_filename']}"
+                                  f"{'  ✅' if v['is_active'] else ''}",
+        )
     else:
         selected_version = None
         st.info("No resume versions found. Upload a resume in Profile first.")
@@ -81,7 +95,7 @@ if submitted:
                 scam_result = {
                     "verdict": "unknown",
                     "confidence": "low",
-                    "summary": f"Could not complete company check: {str(e)}",
+                    "summary": friendly(e, "checking this employer"),
                     "green_flags": [],
                     "red_flags": []
                 }
@@ -188,9 +202,8 @@ if submitted:
                     st.markdown(f"- {action}")
 
             except Exception as e:
-                st.error(f"Something went wrong: {str(e)}")
+                show_error(e, "scoring your match")
 
-st.markdown("---")
 st.markdown("---")
 st.markdown("### 📋 Match History")
 

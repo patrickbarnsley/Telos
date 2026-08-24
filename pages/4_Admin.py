@@ -78,7 +78,71 @@ if not st.session_state.admin_auth:
 
 st.success(f"Admin session active - {_tester}")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Testers", "Usage", "Match Results", "Cert Hallucinations", "Guide Critical Paths", "Outcome Tracking"])
+tab0, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["AI Spend", "Testers", "Usage", "Match Results", "Cert Hallucinations", "Guide Critical Paths", "Outcome Tracking"])
+
+with tab0:
+    from core import spend as spend_mod
+    st.markdown("### AI spend")
+    summary = spend_mod.spend_summary()
+    c1, c2, c3 = st.columns(3)
+    c1.metric(f"Spent in {summary['month']}", f"${summary['used']:.2f}")
+    c2.metric("Monthly ceiling", f"${summary['cap']:.2f}")
+    c3.metric("Remaining", f"${summary['remaining']:.2f}", f"{summary['percent']:.0f}% used")
+    st.progress(min(1.0, summary["percent"] / 100))
+    if summary["remaining"] <= 0:
+        st.error("The ceiling has been reached. AI features are refusing calls until next month. "
+                 "Raise TELOS_AI_MONTHLY_CAP to lift it.")
+    elif summary["percent"] >= 80:
+        st.warning("Over 80 percent of this month's AI budget is gone.")
+
+    from core.ai_engine import MODEL as ai_model
+    price = spend_mod._price_for(ai_model)
+    st.caption(
+        f"Model in use: {ai_model} (${price['in']:.2f} in / ${price['out']:.2f} out per million tokens). "
+        "Set TELOS_AI_MODEL to switch tiers without a redeploy."
+    )
+
+    conn = get_connection()
+    try:
+        breakdown = pd.read_sql_query(
+            """SELECT action,
+                      COUNT(*) AS calls,
+                      SUM(input_tokens) AS input_tokens,
+                      SUM(output_tokens) AS output_tokens,
+                      ROUND(SUM(cost_usd), 4) AS cost_usd
+               FROM ai_spend
+               WHERE created_at >= date_trunc('month', NOW())
+               GROUP BY action
+               ORDER BY cost_usd DESC""", conn)
+        daily = pd.read_sql_query(
+            """SELECT DATE(created_at) AS day, ROUND(SUM(cost_usd), 4) AS cost_usd
+               FROM ai_spend
+               WHERE created_at >= NOW() - INTERVAL '30 days'
+               GROUP BY 1 ORDER BY 1""", conn)
+    finally:
+        conn.close()
+
+    if breakdown.empty:
+        st.info("No AI calls recorded this month.")
+    else:
+        st.markdown("#### Cost by feature, this month")
+        st.dataframe(breakdown, width="stretch", hide_index=True)
+        top = breakdown.iloc[0]
+        st.caption(
+            f"{top['action'] or 'unattributed'} is the most expensive feature this month "
+            f"at ${float(top['cost_usd']):.2f} across {int(top['calls'])} calls."
+        )
+        if not daily.empty:
+            st.markdown("#### Daily spend, last 30 days")
+            st.line_chart(daily.set_index("day"))
+
+    st.markdown("---")
+    st.caption(
+        "This ledger is written at the moment of each API call, so it reflects usage the "
+        "Anthropic console will bill for. It is the app's own count, not an invoice: "
+        "check it against the console before trusting it to the cent."
+    )
+
 
 with tab1:
     st.markdown("### Registered Testers")

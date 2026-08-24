@@ -18,6 +18,43 @@ def _get_client():
         api_key = os.getenv("ANTHROPIC_API_KEY")
     return anthropic.Anthropic(api_key=api_key)
 
+
+# --- Billing choke point -----------------------------------------------------
+# Every request to the Claude API goes through _invoke. No feature calls the
+# SDK directly. That is what makes the monthly ceiling a guarantee rather than
+# a convention: a new feature cannot forget to check it, because there is only
+# one door.
+#
+# MODEL is a single knob on purpose. Opus is the most capable and the most
+# expensive tier ($5 in / $25 out per million tokens). Sonnet is 2.5x cheaper
+# and Haiku 5x cheaper on output; if AI cost becomes the binding constraint,
+# this is the line to change, and TELOS_AI_MODEL changes it without a deploy.
+MODEL = os.getenv("TELOS_AI_MODEL", "claude-opus-4-5")
+
+
+def _invoke(client, action: str = "", tester_name: str = "", **kwargs):
+    """Guarded, metered wrapper around the Messages API."""
+    from core import spend
+    spend.guard()
+    kwargs.setdefault("model", MODEL)
+    message = client.messages.create(**kwargs)
+    try:
+        spend.record_usage_cost(kwargs["model"], getattr(message, "usage", None),
+                                action=action, tester_name=tester_name)
+    except Exception:
+        pass
+    return message
+
+
+def _current_user() -> str:
+    """Best-effort attribution for the ledger. Never raises outside Streamlit."""
+    try:
+        import streamlit as st
+        return st.session_state.get("tester_name", "") or ""
+    except Exception:
+        return ""
+
+
 def extract_resume_text(uploaded_file) -> str:
     filename = uploaded_file.name.lower()
     file_bytes = uploaded_file.read()
@@ -69,8 +106,8 @@ def extract_jd_from_image(uploaded_file) -> str:
         "off or unreadable, transcribe what is visible and do not guess at the rest."
     )
 
-    message = client.messages.create(
-        model="claude-opus-4-5",
+    message = _invoke(
+        client, action="jd_extract", tester_name=_current_user(),
         max_tokens=3000,
         messages=[{
             "role": "user",
@@ -117,8 +154,8 @@ Return ONLY a JSON object. No preamble, no explanation, no markdown formatting. 
 
 For recommended_certs: only recommend certifications from real, verifiable professional organizations you are certain exist. Include the full certification name and the issuing organization. If you are not certain a certification body is real and established, omit it entirely. Never recommend certifications sourced from forums, Reddit, or community discussions. It is better to return fewer recommendations or an empty list than to recommend something that cannot be verified."""
 
-    message = client.messages.create(
-        model="claude-opus-4-5",
+    message = _invoke(
+        client, action="match", tester_name=_current_user(),
         max_tokens=1500,
         temperature=0,
         messages=[{"role": "user", "content": prompt}]
@@ -154,8 +191,8 @@ After your research, return ONLY a JSON object, no other text:
 }}"""
 
     try:
-        message = client.messages.create(
-            model="claude-opus-4-5",
+        message = _invoke(
+            client, action="scam_check", tester_name=_current_user(),
             max_tokens=1500,
             tools=[{"type": "web_search_20250305", "name": "web_search"}],
             messages=[{"role": "user", "content": prompt}]
@@ -188,8 +225,8 @@ Return ONLY a JSON object:
   "red_flags": ["<warning sign>", "..."]
 }}"""
 
-        message = client.messages.create(
-            model="claude-opus-4-5",
+        message = _invoke(
+            client, action="scam_check", tester_name=_current_user(),
             max_tokens=1000,
             messages=[{"role": "user", "content": fallback_prompt}]
         )
@@ -258,8 +295,8 @@ Include 4-6 milestones ordered by priority. Be honest about timeline; don't suga
 
 For critical_certs: only recommend certifications from established, verifiable professional organizations. Include the issuing organization name alongside the cert name. If you cannot confirm a certification body is real and established, omit it. Never fabricate certification bodies, acronyms, or programs sourced from forums or community discussions. Return an empty list rather than recommend something unverifiable."""
 
-    message = client.messages.create(
-        model="claude-opus-4-5",
+    message = _invoke(
+        client, action="roadmap", tester_name=_current_user(),
         max_tokens=3000,
         messages=[{"role": "user", "content": prompt}]
     )
@@ -300,8 +337,8 @@ You know this person's background from their resume. Never say you don't have th
 
     history = conversation_history + [{"role": "user", "content": user_message}]
 
-    message = client.messages.create(
-        model="claude-opus-4-5",
+    message = _invoke(
+        client, action="advisor", tester_name=_current_user(),
         max_tokens=1000,
         system=system,
         messages=history

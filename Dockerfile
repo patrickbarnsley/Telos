@@ -1,9 +1,11 @@
-# Telos — container image for ECS Fargate behind an Application Load Balancer.
+# Telos, container image. Runs on EC2 behind Caddy, which terminates TLS and
+# proxies the Streamlit WebSocket.
 #
 # Note on hosting: Streamlit communicates with the browser over a WebSocket.
 # AWS App Runner does not support WebSockets, so this image will appear to
 # start correctly there and then hang on a loading spinner forever. It must
-# run behind something that proxies WebSockets — an ALB does.
+# run behind something that proxies WebSockets. Caddy's reverse_proxy does this
+# with no extra configuration, which is why it replaced the load balancer.
 
 FROM python:3.11-slim
 

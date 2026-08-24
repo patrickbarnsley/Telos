@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Telos — Route 53 hosted zone. Deploy this FIRST, then point your registrar's
+  Telos, Route 53 hosted zone. Deploy this FIRST, then point your registrar's
   nameservers at the four values in the Nameservers output and wait for
   propagation before deploying the site or app stacks. Both of those stacks
   request ACM certificates validated by DNS; if the nameservers are not live
@@ -18,7 +18,7 @@ Resources:
     Properties:
       Name: !Ref DomainName
       HostedZoneConfig:
-        Comment: !Sub 'Telos — ${DomainName}'
+        Comment: !Sub 'Telos, ${DomainName}'
 
 Outputs:
   HostedZoneId:

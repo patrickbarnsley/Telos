@@ -6,6 +6,7 @@ from core.ai_engine import extract_jd_from_image
 from core.auth import require_login
 from core.demo import demo_banner
 from core.plans import quota_gate, record_usage, JD_EXTRACT
+from core.errors import show as show_error, friendly
 
 apply_theme()
 
@@ -88,7 +89,7 @@ with tab1:
                     extracted = extract_jd_from_image(shot)
                     record_usage(tester_name, JD_EXTRACT)
             except Exception as e:
-                st.error(f"Couldn't read that image: {e}")
+                show_error(e, "reading that screenshot")
             if extracted is not None:
                 if st.session_state["add_jd"].strip():
                     st.session_state["_add_jd_pending"] = extracted

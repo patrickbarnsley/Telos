@@ -2,7 +2,7 @@
 venv/
 .venv/
 
-# Environment variables (API keys — never commit)
+# Environment variables (API keys, never commit)
 .env
 .streamlit/secrets.toml
 
@@ -20,5 +20,5 @@ __pycache__/
 *.bak
 *.bak-*
 
-# Landing page — deployed straight to S3, deliberately kept out of the repo
+# Landing page, deployed straight to S3, deliberately kept out of the repo
 telos-site/

@@ -1,4 +1,4 @@
-# Telos — Product Case Study
+# Telos, Product Case Study
 
 **Live:** [usetelosapp.com](https://usetelosapp.com) · **Demo, no signup:** [try it](https://app.usetelosapp.com/?demo=1) · **Code:** [github.com/patrickbarnsley/Telos](https://github.com/patrickbarnsley/Telos)
 
@@ -15,7 +15,7 @@ progress. She wasn't unqualified. She had no system and no signal, and the
 absence of both was steadily costing her confidence.
 
 That's the whole insight. Plenty of people manage complex pipelines all day at
-work and then run the highest-stakes campaign of their life — their own career —
+work and then run the highest-stakes campaign of their life, their own career,
 out of a spreadsheet and memory. The tooling that exists is either a glorified
 to-do list or an auto-apply spam cannon. Nothing tells you *how you're actually
 doing* or *what to fix*.
@@ -33,17 +33,17 @@ running myself, which is the only reason I trust any of them.
 
 Three pillars, built in dependency order.
 
-**Track** — every application in one pipeline, moving through applied →
+**Track**: every application in one pipeline, moving through applied →
 screening → interview → offer → rejected → withdrawn. Notes, contacts, posted vs.
 requested salary, and the job description live on the record. Funnel metrics
 update as you go.
 
-**Match** — paste a job description, get scored against your active resume the
+**Match**: paste a job description, get scored against your active resume the
 way a real ATS scores you. Requirement-by-requirement breakdown of what you hit
 and what you miss, specific certifications that would close the gap, and an
 automatic employer legitimacy check before you invest time.
 
-**Guide** — an ordered critical path from where you are to your target role.
+**Guide**: an ordered critical path from where you are to your target role.
 Milestones with timelines, concrete actions, and success criteria, built from
 your resume, your goals, and your actual match history. An advisor chat drills
 into any part of it.
@@ -67,7 +67,7 @@ nothing at all.
 
 The engine is calibrated to real applicant tracking systems, which reject most
 resumes. It only counts a requirement as met when the resume states it
-explicitly — implied experience doesn't count. Temperature is set to zero so the
+explicitly, implied experience doesn't count. Temperature is set to zero so the
 same resume and posting always produce the same score.
 
 Users score lower than they expect and it doesn't feel good. That's the point.
@@ -85,7 +85,7 @@ step. It's worth the step.
 
 Every competitor in this space is racing toward one-click mass application. It
 floods employers with low-quality applications and actively harms the people
-using it — it's the mechanism that made the funnel this bad in the first place.
+using it, it's the mechanism that made the funnel this bad in the first place.
 Telos makes each application better rather than making more of them. This is the
 one roadmap item I'd refuse on principle rather than on sequencing.
 
@@ -109,15 +109,15 @@ own their own data.
 **It was wrong, and the evidence was unambiguous.** Almost nobody who wanted to
 use Telos ever used it. "Create an Anthropic account, generate an API key, fork
 a repo, deploy it" is four steps of friction in front of a product whose value
-you cannot see until step five. The people it was built for — job seekers,
-mid-search, already stressed — were precisely the people least willing to spend
+you cannot see until step five. The people it was built for, job seekers,
+mid-search, already stressed, were precisely the people least willing to spend
 an evening on deployment.
 
 **So the model changed.** Telos is now hosted, with accounts, a shared database,
 and the AI cost absorbed on my side. You sign up and it works.
 
-What I take from it: I had optimised v1 for *my* costs — build time,
-infrastructure, API spend — and told myself it was a user benefit. Data
+What I take from it: I had optimised v1 for *my* costs, build time,
+infrastructure, API spend, and told myself it was a user benefit. Data
 ownership was a genuine advantage, but it solved a problem my users didn't have
 yet, at the price of the one they did.
 
@@ -126,14 +126,21 @@ yet, at the price of the one they did.
 ## Pricing without payments
 
 Free tier: unlimited tracking, 10 AI match scores a month, one roadmap.
-Pro at $9: 200 match scores, 10 roadmaps, unlimited advisor chat.
+Pro at $19: 200 match scores, 10 roadmaps, unlimited advisor chat.
 
-**Pro is defined, priced, and public — and takes a waitlist instead of a card.**
+**Pro is defined, priced, and public, and takes a waitlist instead of a card.**
 
 Two reasons. Metering is honest about the economics: tracking is unlimited
 because tracking costs nothing to serve, and AI scoring is capped because it has
 a real marginal cost I pay. An unlimited free tier on someone else's API key
 isn't generous, it's just undated.
+
+The price moved from $9 to $19 before launch. $9 was set by instinct rather
+than by looking, and a survey of the field put comparable tools at $29 to $50.
+Undercutting by 70 percent does not read as a bargain, it reads as a lesser
+product, and it makes the later correction look like a price rise rather than
+a correction. Pricing below the market is a decision, not a default, and I had
+not actually decided it.
 
 And building payments means Stripe, a refund policy, terms of service, and a
 privacy policy that actually matters because I'm holding other people's resumes.
@@ -152,13 +159,13 @@ The app needed a custom domain, which the free host didn't support. The plan of
 record was AWS App Runner.
 
 **App Runner doesn't work here.** Streamlit drives its entire UI over a
-WebSocket, and App Runner doesn't proxy WebSockets — the container passes health
+WebSocket, and App Runner doesn't proxy WebSockets, the container passes health
 checks and the browser hangs on a loading spinner permanently. Found by testing
 the upgrade handshake directly rather than by deploying and wondering.
 
 **So I built ECS Fargate behind an Application Load Balancer**, which handles
 the upgrade correctly. It worked. Then I costed it: **$47.65/month**, of which
-the load balancer and its public IP addresses were $24.73 — more than half the
+the load balancer and its public IP addresses were $24.73, more than half the
 bill, to load-balance a single container.
 
 **I moved to one Graviton EC2 instance running Docker and Caddy: $18.16/month.**
@@ -184,14 +191,14 @@ public IPv4 addresses, and that architecture quietly used three of them. An
 11-dollar-a-month error on a bill I'd explicitly gone and looked up.
 
 **The README drifted badly.** For months it documented SQLite, claimed the app
-had no authentication, and told users to bring their own API key — after all
+had no authentication, and told users to bring their own API key, after all
 three had stopped being true. It was also backslash-escaped throughout, so it
 rendered as literal markdown source on GitHub. The single file most likely to be
 read by someone evaluating the project was both wrong and visibly broken, and I
 didn't notice because I never read my own README.
 
 **The data layer had unscoped queries.** Seven functions accepted a row ID with
-no owner check — `get_job(job_id)` rather than `get_job(job_id, user)`. Not
+no owner check, `get_job(job_id)` rather than `get_job(job_id, user)`. Not
 exploitable through the UI, because IDs only ever came from the user's own
 scoped lists. It would have become a real vulnerability the moment those IDs
 arrived over HTTP, which is exactly what the planned API rewrite does. Caught and
@@ -204,8 +211,8 @@ moment AWS looked like work. Defining it late is better than never; defining it
 before I had feelings about the answer would have been better still.
 
 **I built a login wall in front of a product nobody could see.** For months the
-public link led to a sign-in form. Anyone evaluating it — including hiring
-managers — saw a password field and left. Three pillars of working software sat
+public link led to a sign-in form. Anyone evaluating it, including hiring
+managers, saw a password field and left. Three pillars of working software sat
 behind a door with no window. The fix (a landing page and a seeded, read-only
 demo that needs no signup) took a day, and should have been there from the first
 public link.
@@ -237,7 +244,7 @@ capturing listings, and multi-resume comparison against a single posting.
 | Landing page | S3 + CloudFront |
 
 `ai_engine.py` is the only file that knows Claude exists. Everything else calls
-plain functions. Swapping providers is a one-file change — decided on day one,
+plain functions. Swapping providers is a one-file change, decided on day one,
 and the reason a future move to Bedrock is a module replacement rather than a
 rewrite.
 
