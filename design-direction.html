@@ -1,0 +1,586 @@
+<title>Telos Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Committed dark design: this is a mockup of a dark product surface, so every
+   colour is painted explicitly rather than inherited from the viewer's theme. */
+:root{
+  --ground:#0B0D12;
+  --surface:#12151C;
+  --raised:#171B24;
+  --hover:#1C212B;
+  --line:#21262F;
+  --line-bright:#2E3542;
+  --ink:#E8EBF0;
+  --ink-2:#B4BCCA;
+  --muted:#8A93A6;
+  --dim:#5C6577;
+  --gold:#D4AF57;
+  --gold-dim:rgba(212,175,87,.13);
+  --gold-line:rgba(212,175,87,.32);
+  --good:#4FB286;
+  --warn:#D9A441;
+  --bad:#D9635E;
+  --info:#5B8DEF;
+  --rail:60px;
+  --r:7px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--ground);color:var(--ink);
+  font-family:'Manrope',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1240px;margin:0 auto;padding:0 22px}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+h1,h2,h3,.fig{font-family:'Sora',sans-serif;letter-spacing:-.02em;text-wrap:balance}
+
+/* ---------- page intro ---------- */
+.intro{padding:56px 0 30px;border-bottom:1px solid var(--line)}
+.eyebrow{
+  font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--gold);margin-bottom:14px;
+}
+.intro h1{font-size:clamp(30px,4.4vw,46px);font-weight:700;line-height:1.05;margin-bottom:14px}
+.intro p{color:var(--ink-2);max-width:66ch;font-size:16.5px}
+.intro p + p{margin-top:11px}
+
+section{padding:46px 0}
+.sec-h{margin-bottom:22px}
+.sec-h h2{font-size:25px;font-weight:600;margin-bottom:6px}
+.sec-h p{color:var(--muted);max-width:70ch;font-size:15px}
+
+/* ---------- the app frame ---------- */
+.frame{
+  border:1px solid var(--line-bright);border-radius:11px;overflow:hidden;
+  background:var(--surface);box-shadow:0 24px 60px rgba(0,0,0,.55);
+}
+.chrome{
+  display:flex;align-items:center;gap:9px;padding:9px 13px;
+  background:var(--raised);border-bottom:1px solid var(--line);
+}
+.dot{width:9px;height:9px;border-radius:50%;background:#2E3542}
+.chrome .addr{
+  margin-left:10px;font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--dim);
+}
+.app{display:grid;grid-template-columns:var(--rail) 1fr;min-height:660px}
+
+/* ---------- left rail ---------- */
+.rail{
+  background:var(--ground);border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:5px;
+}
+.mark{
+  width:26px;height:26px;border-radius:50%;border:2.5px solid var(--gold);
+  position:relative;margin-bottom:16px;flex:none;
+}
+.mark::after{content:"";position:absolute;inset:6px;border-radius:50%;background:var(--gold)}
+.rail-btn{
+  width:38px;height:34px;border-radius:var(--r);display:grid;place-items:center;
+  color:var(--dim);cursor:pointer;transition:background .15s,color .15s;position:relative;
+}
+.rail-btn:hover{background:var(--hover);color:var(--ink-2)}
+.rail-btn.on{background:var(--gold-dim);color:var(--gold)}
+.rail-btn.on::before{
+  content:"";position:absolute;left:-1px;top:8px;bottom:8px;width:2px;
+  background:var(--gold);border-radius:0 2px 2px 0;
+}
+.rail-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.rail-sp{flex:1}
+
+/* ---------- top bar ---------- */
+.main{display:flex;flex-direction:column;min-width:0}
+.topbar{
+  display:flex;align-items:center;gap:14px;padding:11px 18px;
+  border-bottom:1px solid var(--line);background:var(--surface);
+}
+.crumb{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--dim)}
+.crumb b{color:var(--ink-2);font-weight:500}
+.cmdk{
+  margin-left:auto;display:flex;align-items:center;gap:9px;
+  background:var(--ground);border:1px solid var(--line);border-radius:var(--r);
+  padding:5px 10px;color:var(--dim);font-size:13px;min-width:200px;cursor:text;
+}
+.cmdk svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.8}
+.kbd{
+  margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;
+  border:1px solid var(--line-bright);border-radius:4px;padding:1px 5px;color:var(--dim);
+}
+.avatar{
+  width:27px;height:27px;border-radius:50%;background:var(--gold-dim);
+  border:1px solid var(--gold-line);color:var(--gold);
+  display:grid;place-items:center;font-size:11px;font-weight:600;flex:none;
+}
+
+/* ---------- campaign timeline ---------- */
+.tl{padding:15px 18px 13px;border-bottom:1px solid var(--line);background:var(--surface)}
+.tl-head{display:flex;align-items:baseline;gap:12px;margin-bottom:11px}
+.tl-head .t{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);
+}
+.tl-head .r{margin-left:auto;font-size:12px;color:var(--dim)}
+.tl-grid{display:flex;align-items:flex-end;gap:6px;height:58px}
+.wk{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:2px;min-width:0}
+/* Bars sit narrower than their slot so each week reads as a discrete column
+   rather than the whole strip reading as one continuous band. */
+.wk i{display:block;border-radius:2px;width:62%;margin:0 auto}
+.wk .app-b{background:var(--line-bright)}
+.wk .scr{background:var(--info);opacity:.75}
+.wk .int{background:var(--good)}
+.wk .off{background:var(--gold)}
+.tl-axis{
+  display:flex;justify-content:space-between;margin-top:7px;
+  font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--dim);
+}
+.tl-legend{display:flex;gap:14px;margin-top:9px;font-size:11px;color:var(--muted)}
+.tl-legend span{display:flex;align-items:center;gap:5px}
+.tl-legend i{width:8px;height:8px;border-radius:2px;display:block}
+
+/* ---------- board ---------- */
+.board{
+  display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:1px;
+  background:var(--line);flex:1;overflow-x:auto;
+}
+.col{background:var(--surface);padding:13px 12px;display:flex;flex-direction:column;gap:9px;min-width:0}
+.col-h{display:flex;align-items:center;gap:8px;padding-bottom:3px}
+.col-h .nm{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);
+}
+.col-h .ct{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dim);
+  background:var(--ground);border:1px solid var(--line);border-radius:20px;padding:0 6px;
+}
+.col-h .bar{height:2px;flex:1;border-radius:2px;background:var(--line-bright)}
+.col.applied .bar{background:var(--line-bright)}
+.col.screening .bar{background:var(--info)}
+.col.interview .bar{background:var(--good)}
+.col.offer .bar{background:var(--gold)}
+
+.card{
+  background:var(--raised);border:1px solid var(--line);border-radius:var(--r);
+  padding:11px;cursor:pointer;transition:border-color .15s,transform .15s,background .15s;
+}
+.card:hover{border-color:var(--line-bright);background:var(--hover);transform:translateY(-1px)}
+.card.sel{border-color:var(--gold-line);background:var(--gold-dim)}
+.card .co{font-family:'Sora',sans-serif;font-size:13.5px;font-weight:600;line-height:1.25}
+.card .ro{font-size:12px;color:var(--muted);margin-top:1px;line-height:1.3}
+.card .foot{display:flex;align-items:center;gap:7px;margin-top:9px}
+.score{
+  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;
+  padding:1px 6px;border-radius:4px;font-variant-numeric:tabular-nums;
+}
+.score.hi{background:rgba(79,178,134,.15);color:var(--good)}
+.score.mid{background:rgba(217,164,65,.15);color:var(--warn)}
+.score.lo{background:rgba(217,99,94,.15);color:var(--bad)}
+.card .age{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dim);margin-left:auto}
+.card .sal{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--dim);margin-top:6px}
+.ghost{
+  border:1px dashed var(--line-bright);border-radius:var(--r);padding:9px;
+  text-align:center;font-size:12px;color:var(--dim);cursor:pointer;transition:all .15s;
+}
+.ghost:hover{border-color:var(--gold-line);color:var(--gold)}
+
+/* ---------- match panel ---------- */
+.panel{
+  border:1px solid var(--line-bright);border-radius:11px;overflow:hidden;background:var(--surface);
+  box-shadow:0 24px 60px rgba(0,0,0,.55);
+}
+.p-head{
+  display:flex;align-items:center;gap:14px;padding:16px 18px;
+  border-bottom:1px solid var(--line);background:var(--raised);
+}
+.ring{width:62px;height:62px;flex:none;position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .v{
+  position:absolute;inset:0;display:grid;place-items:center;
+  font-family:'Sora',sans-serif;font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;
+}
+.p-head .who .lab{
+  font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--muted);
+}
+.p-head .who .ttl{font-family:'Sora',sans-serif;font-size:16px;font-weight:600;margin-top:2px}
+.p-head .who .sub{font-size:12.5px;color:var(--muted)}
+.verdict{
+  margin-left:auto;text-align:right;font-size:12px;color:var(--muted);max-width:210px;
+}
+.verdict b{display:block;color:var(--warn);font-family:'JetBrains Mono',monospace;
+  font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+
+.p-body{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line)}
+.p-col{background:var(--surface);padding:15px 18px}
+.p-col h4{
+  font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:11px;
+}
+.req{display:flex;gap:9px;padding:6px 0;font-size:13px;color:var(--ink-2);align-items:flex-start;
+  border-top:1px solid rgba(33,38,47,.6)}
+.req:first-of-type{border-top:none}
+.req .ic{width:15px;height:15px;border-radius:4px;flex:none;display:grid;place-items:center;
+  font-size:9px;font-weight:700;margin-top:2px}
+.ic-y{background:rgba(79,178,134,.16);color:var(--good)}
+.ic-n{background:rgba(217,99,94,.16);color:var(--bad)}
+.p-foot{
+  padding:13px 18px;border-top:1px solid var(--line);background:var(--raised);
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;
+}
+.chip{
+  font-size:12px;color:var(--ink-2);background:var(--ground);
+  border:1px solid var(--line);border-radius:20px;padding:3px 10px;
+}
+.chip.gold{border-color:var(--gold-line);color:var(--gold);background:var(--gold-dim)}
+.p-foot .act{margin-left:auto;display:flex;gap:8px}
+.btn{
+  font-family:'Manrope',sans-serif;font-size:12.5px;font-weight:600;padding:6px 13px;
+  border-radius:var(--r);border:1px solid var(--line-bright);background:transparent;
+  color:var(--ink-2);cursor:pointer;transition:all .15s;
+}
+.btn:hover{border-color:var(--gold-line);color:var(--gold)}
+.btn.pri{background:var(--gold);border-color:var(--gold);color:#0B0D12}
+.btn.pri:hover{background:#E0BF6C;color:#0B0D12}
+
+/* ---------- tokens ---------- */
+.tokens{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.tok{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:13px}
+.tok .sw{height:38px;border-radius:5px;margin-bottom:9px;border:1px solid rgba(255,255,255,.05)}
+.tok .nm{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--ink-2)}
+.tok .hx{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--dim);margin-top:1px}
+.tok .use{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.4}
+
+table{border-collapse:collapse;width:100%;font-size:14px;min-width:520px}
+.tbl-wrap{overflow-x:auto}
+th{
+  text-align:left;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:500;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+  padding:0 14px 9px 0;border-bottom:1px solid var(--line-bright);
+}
+td{padding:11px 14px 11px 0;border-bottom:1px solid var(--line);vertical-align:top;color:var(--ink-2)}
+td b{color:var(--ink)}
+td.num{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.note{
+  border-left:2px solid var(--gold-line);background:var(--gold-dim);
+  padding:13px 16px;border-radius:0 var(--r) var(--r) 0;margin:18px 0;font-size:14.5px;color:var(--ink-2);
+}
+.note b{color:var(--gold);font-family:'JetBrains Mono',monospace;font-size:10.5px;
+  letter-spacing:.12em;text-transform:uppercase;display:block;margin-bottom:5px}
+.note.warn{border-left-color:rgba(217,99,94,.5);background:rgba(217,99,94,.09)}
+.note.warn b{color:var(--bad)}
+
+ul{margin:0 0 0 19px;color:var(--ink-2)}
+li{margin-bottom:7px}
+li b{color:var(--ink)}
+footer{border-top:1px solid var(--line);padding:26px 0 46px;color:var(--dim);font-size:13px}
+
+@media(max-width:860px){
+  .app{grid-template-columns:1fr}
+  .rail{flex-direction:row;justify-content:flex-start;padding:8px 12px;gap:4px;
+    border-right:none;border-bottom:1px solid var(--line)}
+  .mark{margin-bottom:0;margin-right:8px}
+  .rail-sp{display:none}
+  .board{grid-template-columns:repeat(4,minmax(178px,1fr))}
+  .p-body{grid-template-columns:1fr}
+  .verdict{display:none}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+
+<div class="wrap">
+
+<header class="intro">
+  <div class="eyebrow">Design direction // Telos</div>
+  <h1>An operations console, not a to-do list</h1>
+  <p>A job search run properly is a campaign with a pipeline, a conversion rate and a set of open fronts. Every competitor renders that as a task list. This treats it as an instrument panel: dense, calm, and readable at a glance.</p>
+  <p>What follows is a mockup, not a build. Nothing here is wired up. It exists so the direction can be argued with before any code is written.</p>
+</header>
+
+<section>
+  <div class="sec-h">
+    <h2>Track</h2>
+    <p>The board is the product. Four columns, one card per application, and a campaign timeline across the top showing where the last ten weeks actually went.</p>
+  </div>
+
+  <div class="frame">
+    <div class="chrome">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="addr">app.usetelosapp.com/track</span>
+    </div>
+
+    <div class="app">
+      <nav class="rail">
+        <div class="mark"></div>
+        <div class="rail-btn" title="Profile"><svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+        <div class="rail-btn on" title="Track"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="11" rx="1"/></svg></div>
+        <div class="rail-btn" title="Match"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/></svg></div>
+        <div class="rail-btn" title="Guide"><svg viewBox="0 0 24 24"><path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/></svg></div>
+        <div class="rail-sp"></div>
+        <div class="rail-btn" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19a1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1A1.7 1.7 0 0 0 5 8.9a1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9.5a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></div>
+      </nav>
+
+      <div class="main">
+        <div class="topbar">
+          <span class="crumb">Telos / <b>Track</b></span>
+          <div class="cmdk">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            Search or jump to
+            <span class="kbd">Ctrl K</span>
+          </div>
+          <div class="avatar">JA</div>
+        </div>
+
+        <div class="tl">
+          <div class="tl-head">
+            <span class="t">Campaign timeline</span>
+            <span class="r">Last 10 weeks &middot; 12 applications &middot; 58.3% response</span>
+          </div>
+          <div class="tl-grid" id="tl"></div>
+          <div class="tl-axis"><span>10 wks ago</span><span>5 wks</span><span>This week</span></div>
+          <div class="tl-legend">
+            <span><i style="background:var(--line-bright)"></i>Applied</span>
+            <span><i style="background:var(--info);opacity:.75"></i>Screening</span>
+            <span><i style="background:var(--good)"></i>Interview</span>
+            <span><i style="background:var(--gold)"></i>Offer</span>
+          </div>
+        </div>
+
+        <div class="board">
+          <div class="col applied">
+            <div class="col-h"><span class="nm">Applied</span><span class="ct">5</span><span class="bar"></span></div>
+            <div class="card">
+              <div class="co">Beacon Data Systems</div>
+              <div class="ro">Technical Program Manager</div>
+              <div class="sal">$115k &ndash; $140k &middot; Remote</div>
+              <div class="foot"><span class="score lo">58</span><span class="age">14d</span></div>
+            </div>
+            <div class="card">
+              <div class="co">Halcyon Software</div>
+              <div class="ro">Project Manager, Professional Services</div>
+              <div class="sal">$95k &ndash; $115k &middot; Boston</div>
+              <div class="foot"><span class="score mid">66</span><span class="age">9d</span></div>
+            </div>
+            <div class="card">
+              <div class="co">Sable Systems</div>
+              <div class="ro">Program Manager</div>
+              <div class="sal">$120k &ndash; $145k &middot; Remote</div>
+              <div class="foot"><span class="score mid">71</span><span class="age">6d</span></div>
+            </div>
+            <div class="ghost">+ Add application</div>
+          </div>
+
+          <div class="col screening">
+            <div class="col-h"><span class="nm">Screening</span><span class="ct">2</span><span class="bar"></span></div>
+            <div class="card">
+              <div class="co">Vantage Clinical</div>
+              <div class="ro">Implementation Manager</div>
+              <div class="sal">$98k &ndash; $118k &middot; Remote</div>
+              <div class="foot"><span class="score hi">81</span><span class="age">11d</span></div>
+            </div>
+            <div class="card">
+              <div class="co">Foundry Medical</div>
+              <div class="ro">Delivery Manager</div>
+              <div class="sal">$108k &ndash; $128k &middot; Hybrid</div>
+              <div class="foot"><span class="score mid">73</span><span class="age">4d</span></div>
+            </div>
+          </div>
+
+          <div class="col interview">
+            <div class="col-h"><span class="nm">Interview</span><span class="ct">1</span><span class="bar"></span></div>
+            <div class="card sel">
+              <div class="co">Northwind Health</div>
+              <div class="ro">Technical Project Manager</div>
+              <div class="sal">$105k &ndash; $125k &middot; Hybrid</div>
+              <div class="foot"><span class="score mid">74</span><span class="age">18d</span></div>
+            </div>
+          </div>
+
+          <div class="col offer">
+            <div class="col-h"><span class="nm">Offer</span><span class="ct">1</span><span class="bar"></span></div>
+            <div class="card">
+              <div class="co">Kestrel Analytics</div>
+              <div class="ro">Senior Business Analyst</div>
+              <div class="sal">$102k &ndash; $112k &middot; Remote</div>
+              <div class="foot"><span class="score hi">84</span><span class="age">21d</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>What changed and why</b>
+    Status becomes position rather than a dropdown, so the shape of the search is visible without reading. Every card carries the one number that matters, colour-coded by band. The timeline answers a question no competitor asks: not what is in the pipeline, but whether the last ten weeks were working.
+  </div>
+</section>
+
+<section>
+  <div class="sec-h">
+    <h2>Match</h2>
+    <p>The score is the product. It earns the largest element on the page, and the requirements sit either side of it so the gap reads in one pass.</p>
+  </div>
+
+  <div class="panel">
+    <div class="p-head">
+      <div class="ring">
+        <svg width="62" height="62" viewBox="0 0 62 62">
+          <circle cx="31" cy="31" r="26" fill="none" stroke="#21262F" stroke-width="6"/>
+          <circle cx="31" cy="31" r="26" fill="none" stroke="#D9A441" stroke-width="6"
+                  stroke-linecap="round" stroke-dasharray="163.4" stroke-dashoffset="42.5"/>
+        </svg>
+        <div class="v" style="color:var(--warn)">74</div>
+      </div>
+      <div class="who">
+        <div class="lab">ATS match score</div>
+        <div class="ttl">Technical Project Manager</div>
+        <div class="sub">Northwind Health &middot; scored against TPM-focused v3</div>
+      </div>
+      <div class="verdict">
+        <b>Likely filtered</b>
+        Real ATS systems reject most resumes at this band. Two fixes below move it above 80.
+      </div>
+    </div>
+
+    <div class="p-body">
+      <div class="p-col">
+        <h4>Requirements met</h4>
+        <div class="req"><span class="ic ic-y">&#10003;</span><span>5+ years supporting cross-functional technical delivery</span></div>
+        <div class="req"><span class="ic ic-y">&#10003;</span><span>Agile / Scrum certification, CSM via Scrum Alliance</span></div>
+        <div class="req"><span class="ic ic-y">&#10003;</span><span>Stakeholder reporting to director level</span></div>
+        <div class="req"><span class="ic ic-y">&#10003;</span><span>UAT coordination across QA and operations</span></div>
+        <div class="req"><span class="ic ic-y">&#10003;</span><span>Healthcare payer domain exposure</span></div>
+      </div>
+      <div class="p-col">
+        <h4>Gaps found</h4>
+        <div class="req"><span class="ic ic-n">&#10005;</span><span>Budget ownership. The resume shows support, not ownership</span></div>
+        <div class="req"><span class="ic ic-n">&#10005;</span><span>Jira administration. Confluence is listed, Jira is not</span></div>
+        <div class="req"><span class="ic ic-n">&#10005;</span><span>PMP certification, listed as preferred</span></div>
+        <div class="req"><span class="ic ic-n">&#10005;</span><span>Explicit schedule ownership across concurrent projects</span></div>
+      </div>
+    </div>
+
+    <div class="p-foot">
+      <span class="chip gold">PMP &middot; closes the largest gap</span>
+      <span class="chip">PMI-ACP</span>
+      <span class="chip">Employer verified</span>
+      <div class="act">
+        <button class="btn">Save result</button>
+        <button class="btn pri">Tailor resume</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>What changed and why</b>
+    Met and missing sit side by side instead of stacked, which is what makes the gap legible at a glance. The verdict is stated in words next to the number, because 74 means nothing to someone who has not been told that most resumes are rejected. Certifications become chips ranked by impact rather than a bulleted list of equals.
+  </div>
+</section>
+
+<section>
+  <div class="sec-h">
+    <h2>The system</h2>
+    <p>Six colours, three faces, one spacing scale. Everything above is built from these and nothing else.</p>
+  </div>
+
+  <div class="tokens">
+    <div class="tok"><div class="sw" style="background:#0B0D12"></div><div class="nm">ground</div><div class="hx">#0B0D12</div><div class="use">Page. Cooler and deeper than the current #0F1117, which reads slightly muddy against gold.</div></div>
+    <div class="tok"><div class="sw" style="background:#12151C"></div><div class="nm">surface</div><div class="hx">#12151C</div><div class="use">Panels and columns. One step up, never two.</div></div>
+    <div class="tok"><div class="sw" style="background:#21262F"></div><div class="nm">line</div><div class="hx">#21262F</div><div class="use">Hairlines carry the structure. No drop shadows inside the app.</div></div>
+    <div class="tok"><div class="sw" style="background:#D4AF57"></div><div class="nm">gold</div><div class="hx">#D4AF57</div><div class="use">The accent, kept from your brand. Reserved for the current item and the primary action.</div></div>
+    <div class="tok"><div class="sw" style="background:linear-gradient(90deg,#4FB286 33%,#D9A441 33%,#D9A441 66%,#D9635E 66%)"></div><div class="nm">semantic</div><div class="hx">#4FB286 / #D9A441 / #D9635E</div><div class="use">Score bands and status only. Deliberately separate from the accent so state never competes with brand.</div></div>
+    <div class="tok"><div class="sw" style="background:#E8EBF0"></div><div class="nm">ink</div><div class="hx">#E8EBF0</div><div class="use">Slightly blue rather than pure white, so it sits with the cool neutrals instead of glaring.</div></div>
+  </div>
+
+  <div class="tbl-wrap" style="margin-top:26px">
+    <table>
+      <thead><tr><th>Role</th><th>Face</th><th>Where it earns its place</th></tr></thead>
+      <tbody>
+        <tr><td><b>Display</b></td><td class="num">Sora 600&ndash;700</td><td>Headings, company names, the score itself. Geometric and slightly technical without tipping into novelty.</td></tr>
+        <tr><td><b>Interface</b></td><td class="num">Manrope 400&ndash;600</td><td>All running text. Holds up at 12px, which most of this UI is.</td></tr>
+        <tr><td><b>Data</b></td><td class="num">JetBrains Mono 400&ndash;500</td><td>Scores, salaries, ages, column labels. Tabular figures mean numbers line up down a column.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <b>On futuristic</b>
+    The reflex reading is neon on black, which is the single most templated look in software right now and would date within a year. What actually reads as advanced is instrument-grade precision: hairlines instead of shadows, tabular numerals, one accent held in reserve, density handled calmly. Closer to a glass cockpit than a sci-fi film.
+  </div>
+</section>
+
+<section>
+  <div class="sec-h">
+    <h2>What this costs</h2>
+    <p>Two honest paths, and one correction first.</p>
+  </div>
+
+  <div class="note warn">
+    <b>Telos is still a Streamlit app</b>
+    Moving to AWS changed where it runs, not what it is. The design ceiling has not moved at all. Everything above assumes one of the two paths below.
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Path</th><th class="num">Effort</th><th>What you actually get</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Streamlit, pushed hard</b><br><span style="color:var(--muted);font-size:13px">Custom CSS, SVG icons replacing emoji, real components instead of st.metric</span></td>
+          <td class="num">2&ndash;3 days</td>
+          <td>Perhaps 65% of the visual gain. The palette, type and density above are all reachable. The board is not, without a custom component. <b>Every click still reruns the whole script</b>, so it keeps the half-second lag that stops it feeling like an app you work in.</td>
+        </tr>
+        <tr>
+          <td><b>React and FastAPI</b><br><span style="color:var(--muted);font-size:13px">The rebuild already in your roadmap</span></td>
+          <td class="num">5&ndash;9 weeks</td>
+          <td>All of it, plus instant interaction, drag between columns, and a keyboard layer. Your EC2 box and Caddy already serve this with no infrastructure change: static frontend, proxied API, same instance.</td>
+        </tr>
+        <tr>
+          <td><b>Hybrid</b><br><span style="color:var(--muted);font-size:13px">Streamlit shell, one custom React component for the board</span></td>
+          <td class="num">1&ndash;2 weeks</td>
+          <td>The board and its interactions become real while the rest stays Streamlit. Genuinely the middle option, and it doubles as a way to learn React on something small before committing to the rewrite.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <b>The part worth deciding first</b>
+    Not which path, but whether the interface is what is actually holding Telos back. That is answerable from the admin panel now rather than by taste. If people arrive and leave without returning, the interface is a plausible cause and this work is justified. If they never arrive at all, weeks spent here would be weeks not spent on the thing that is.
+  </div>
+</section>
+
+<footer class="wrap" style="padding-left:0;padding-right:0">
+  Mockup only. Nothing here is wired to the live app. Built to be argued with.
+</footer>
+
+</div>
+
+<script>
+// Campaign timeline: ten weeks of a real-shaped search, applications tapering
+// as interviews and an offer appear late.
+(function(){
+  var weeks = [
+    {a:3,s:0,i:0,o:0},{a:2,s:1,i:0,o:0},{a:1,s:1,i:0,o:0},{a:2,s:0,i:0,o:0},
+    {a:1,s:2,i:0,o:0},{a:1,s:1,i:1,o:0},{a:1,s:1,i:0,o:0},{a:0,s:2,i:1,o:0},
+    {a:1,s:1,i:1,o:0},{a:0,s:1,i:1,o:1}
+  ];
+  var unit = 10;
+  var el = document.getElementById('tl');
+  weeks.forEach(function(w){
+    var col = document.createElement('div');
+    col.className = 'wk';
+    [['off',w.o],['int',w.i],['scr',w.s],['app-b',w.a]].forEach(function(pair){
+      for (var n = 0; n < pair[1]; n++){
+        var bar = document.createElement('i');
+        bar.className = pair[0];
+        bar.style.height = unit + 'px';
+        col.appendChild(bar);
+      }
+    });
+    el.appendChild(col);
+  });
+})();
+</script>
