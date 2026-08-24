@@ -84,6 +84,14 @@ def get_plan(tester_name: str) -> str:
     return plan if plan in PLANS else "free"
 
 
+def is_owner(tester_name: str) -> bool:
+    """True only for accounts listed in OWNER_EMAILS. The demo account never
+    qualifies, whatever it is called."""
+    if not tester_name or tester_name == DEMO_TESTER:
+        return False
+    return tester_name.lower() in _owner_emails()
+
+
 def plan_label(tester_name: str) -> str:
     return PLANS[get_plan(tester_name)]["label"]
 

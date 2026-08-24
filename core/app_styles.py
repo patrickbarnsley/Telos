@@ -36,6 +36,30 @@ def apply_theme():
     .stSpinner > div { border-top-color: #C9A84C !important; }
     </style>
     """, unsafe_allow_html=True)
+    hide_admin_nav()
+
+def hide_admin_nav():
+    """Remove the Admin entry from the sidebar for anyone who is not the owner.
+
+    This is presentation only. The Admin page enforces its own access control;
+    hiding the link just stops the demo and ordinary users being shown a door
+    they cannot open and should not know about.
+    """
+    import streamlit as st
+    try:
+        from core.plans import is_owner
+        if is_owner(st.session_state.get("tester_name", "")):
+            return
+    except Exception:
+        pass  # if anything fails, err towards hiding
+
+    st.markdown("""
+    <style>
+    [data-testid="stSidebarNav"] a[href$="/Admin"],
+    [data-testid="stSidebarNav"] a[href*="4_Admin"] { display: none !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
 
 def show_help(page_name: str):
     from core.help_content import HELP_CONTENT

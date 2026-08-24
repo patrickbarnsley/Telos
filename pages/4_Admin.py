@@ -1,9 +1,12 @@
 import streamlit as st
 import json
 import os
+import hmac
 import psycopg2.extras
 import pandas as pd
 from core.app_styles import apply_theme
+from core.auth import require_login
+from core.plans import is_owner
 from core.database import get_connection, get_all_outcome_correlations, get_usage_over_time
 from dotenv import load_dotenv
 
@@ -11,7 +14,32 @@ load_dotenv()
 
 apply_theme()
 
-st.title("🔐 Telos Admin")
+# --- Access control -------------------------------------------------------
+# Three gates, in order. This page exposes every user's email, target role,
+# match history and usage, so it is not defended by a shared password alone.
+#
+#   1. Signed in to Telos at all. Previously absent, which left the page
+#      reachable by anyone who knew the URL.
+#   2. Signed in as an owner. Membership comes from OWNER_EMAILS, so a correct
+#      password from a non-owner account is still refused. The demo account can
+#      never satisfy this.
+#   3. The admin password, as a second factor, compared in constant time and
+#      rate limited.
+
+require_login()
+
+_tester = st.session_state.get("tester_name", "")
+
+if not is_owner(_tester):
+    # Deliberately the same message a signed-out visitor would see. Confirming
+    # that an admin page exists here tells an attacker where to spend effort.
+    st.title("Page not found")
+    st.markdown("This page does not exist, or you do not have access to it.")
+    st.page_link("app.py", label="Back to Telos")
+    st.stop()
+
+st.title("Telos Admin")
+
 
 def get_admin_password():
     try:
@@ -19,21 +47,36 @@ def get_admin_password():
     except Exception:
         return os.getenv("ADMIN_PASSWORD", "")
 
+
 if "admin_auth" not in st.session_state:
     st.session_state.admin_auth = False
+if "admin_attempts" not in st.session_state:
+    st.session_state.admin_attempts = 0
 
 if not st.session_state.admin_auth:
-    st.markdown("### Admin Access")
+    st.markdown("### Admin access")
+    st.caption(f"Signed in as {_tester}")
+
+    if st.session_state.admin_attempts >= 5:
+        st.error("Too many failed attempts. Reload the page to try again.")
+        st.stop()
+
     password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if password == get_admin_password():
+    if st.button("Log in"):
+        expected = get_admin_password()
+        # hmac.compare_digest avoids leaking the password length or prefix
+        # through response timing.
+        if expected and hmac.compare_digest(password, expected):
             st.session_state.admin_auth = True
+            st.session_state.admin_attempts = 0
             st.rerun()
         else:
-            st.error("Incorrect password.")
+            st.session_state.admin_attempts += 1
+            remaining = 5 - st.session_state.admin_attempts
+            st.error(f"Incorrect password. {remaining} attempt(s) remaining.")
     st.stop()
 
-st.success("Logged in as admin.")
+st.success(f"Admin session active - {_tester}")
 
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Testers", "Usage", "Match Results", "Cert Hallucinations", "Guide Critical Paths", "Outcome Tracking"])
 
