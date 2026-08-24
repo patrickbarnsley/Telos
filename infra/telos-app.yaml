@@ -414,7 +414,18 @@ Resources:
           set -euo pipefail
           export TELOS_BACKUP_BUCKET="${BackupBucket}"
           export AWS_DEFAULT_REGION="${AWS::Region}"
-          set -a; . /opt/telos/.env; set +a
+          # Read the value literally. Sourcing the file runs it as shell, so a
+          # password containing $, & or a backtick silently becomes empty and the
+          # backup then fails with an unrelated pg_dump error. Docker's env_file
+          # parser does not do this, which is why the app never noticed.
+          read_env() {
+            grep -m1 "^$1=" /opt/telos/.env 2>/dev/null | cut -d= -f2-
+          }
+          DATABASE_URL="$(read_env DATABASE_URL)"
+          if [ -z "$DATABASE_URL" ]; then
+            echo "BACKUP FAILED: DATABASE_URL not found in /opt/telos/.env" >&2
+            exit 1
+          fi
           STAMP="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
           WORK="$(mktemp -d)"
           trap 'rm -rf "$WORK"' EXIT

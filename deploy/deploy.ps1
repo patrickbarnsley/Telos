@@ -323,6 +323,42 @@ function Invoke-Release {
             throw 'Deploy failed on the instance.'
         }
         Ok 'Application rebuilt and running'
+
+        # Verify the nightly backup is actually installed, on every release.
+        #
+        # This is not belt and braces, it is the fix for a real failure. The
+        # backup timer is created by the instance's UserData, and UserData only
+        # runs on first boot. Changing it in the template and running the app
+        # step updates the stack and restarts the instance, but cloud-init does
+        # not re-run, so the backup silently never appears. Nothing reported an
+        # error; the timer simply was not there. Checking here means a release
+        # repairs it instead of everyone assuming it is fine.
+        Say 'Checking the nightly backup'
+        $bkId = Aws ssm send-command `
+            --instance-ids $instance `
+            --document-name 'AWS-RunShellScript' `
+            --comment 'Telos backup check' `
+            --parameters 'commands=["systemctl is-enabled telos-backup.timer 2>/dev/null || echo MISSING","test -x /opt/telos/backup.sh && echo SCRIPT_OK || echo SCRIPT_MISSING","command -v pg_dump >/dev/null && echo PGDUMP_OK || echo PGDUMP_MISSING"]' `
+            --query 'Command.CommandId' --output text
+        if ($LASTEXITCODE -eq 0 -and $bkId) {
+            Start-Sleep -Seconds 6
+            $bk = (Aws ssm get-command-invocation --command-id $bkId --instance-id $instance `
+                    --query 'StandardOutputContent' --output text 2>$null)
+            if ($bk -match 'MISSING') {
+                Warn 'The nightly database backup is NOT fully installed on this instance:'
+                foreach ($line in ($bk -split "`r?`n")) {
+                    if ($line -match 'MISSING') { Write-Host "    $line" -ForegroundColor Yellow }
+                }
+                Warn 'UserData only runs on a first boot, so a stack update will not install it.'
+                Warn 'Recreate the instance, or install it by hand once. See DEPLOY-AWS.md.'
+            }
+            else {
+                Ok 'Nightly backup installed and armed'
+            }
+        }
+        else {
+            Warn 'Could not check the backup timer. Verify it manually.'
+        }
     }
     finally {
         Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
