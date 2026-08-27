@@ -184,12 +184,16 @@ session, on your say-so.** The command you gave ran clean:
 `Version: 1` means the parameter never existed — `--overwrite` was a create, not
 an update — so the cap has never come from Parameter Store.
 
-**The live cap is still $40, and a restart will not change that.** I first wrote
-here that `systemctl restart telos` would pick the new value up. That was wrong,
-and it was wrong because I read the template in `infra/telos-app.yaml` and
-asserted it as the state of the running instance. Patrick caught it. Verified
-over SSM (`aacb532c-37f0-429f-8fa7-b119093e1462`), the actual
-`/opt/telos/refresh-env.sh` on `i-09018a35526792b92` reads **six** keys:
+**Resolved: the live cap is now $150.** Confirmed in the running container after
+a restart. Getting there took a correction and a drift audit, both below,
+because the parameter alone did nothing.
+
+I first wrote here that `systemctl restart telos` would pick the new value up.
+That was wrong, and it was wrong because I read the template in
+`infra/telos-app.yaml` and asserted it as the state of the running instance.
+Patrick caught it. Verified over SSM (`aacb532c-37f0-429f-8fa7-b119093e1462`),
+the actual `/opt/telos/refresh-env.sh` on `i-09018a35526792b92` read **six**
+keys:
 
 ```
 for KEY in ANTHROPIC_API_KEY DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY ADMIN_PASSWORD OWNER_EMAILS; do
@@ -201,14 +205,29 @@ template, which **the instance has never seen**: `refresh-env.sh` is dated
 2026-08-23 22:58 UTC, first boot, and UserData does not re-run on a stack update.
 This is the same drift that hid the backup failure.
 
-So the parameter I wrote is real, correctly named, and currently fetched by
-nothing. Two consequences beyond the cap:
+So the parameter was real, correctly named, and fetched by nothing.
 
-- `SITE_URL` and `SUPPORT_EMAIL` have never reached the instance either. Both
-  silently fall back to their code defaults, and have done since first boot.
-- The on-instance script also `printf`s every key unconditionally, where the
-  template only writes non-empty ones. It happens not to matter today because
-  all six of its keys exist, but a missing one would write a bare `KEY=` line.
+**Fixed, in all three places** (`7202db2` is the unrelated backup mirror;
+`8acca46` is this):
+
+1. `/opt/telos/refresh-env.sh` rewritten on the instance over SSM. Backed up,
+   `bash -n` checked, installed atomically. Its sha256 matches the rendered
+   template byte for byte.
+2. `infra/telos-app.yaml`, so a rebuild does not regress to six keys.
+3. `$optionalKeys` in `deploy/deploy.ps1`, so `-Step secrets` can write the
+   values at all — a key absent there cannot be set in the first place.
+
+The list also gained the six `TELOS_AI_MODEL_<ACTION>` names. A follow-up audit
+pass reports **11 of 11 files in sync**, and after `systemctl restart telos` the
+container reports `TELOS_AI_MONTHLY_CAP=150`, both services up with `telos`
+healthy, and `app.usetelosapp.com` returning 200.
+
+**Still outstanding: `SITE_URL` has never existed.** The script now reads it, but
+the parameter was never created — only seven exist under `/telos/`. Supabase
+builds confirmation and password-reset links from it, so it is currently falling
+back to a code default. Noted in `REACT-MIGRATION-SPEC.md` as a cutover item,
+because a reset requested on `beta` would otherwise email a link into the
+Streamlit app. `SUPPORT_EMAIL` is in the same position, with lower stakes.
 
 Environment note for future SSM work here: `aws ssm put-parameter --name
 /telos/...` **fails from Git Bash** with "Parameter name must be a fully
@@ -385,18 +404,24 @@ case anything outside this repo calls it.
 1. Run `run_all.py` against a scratch Postgres. Expect first-run breakage in the
    three new suites.
 2. Fix the `telos-site` pricing table — that mismatch is live right now.
-3. ~~`aws ssm put-parameter` for `TELOS_AI_MONTHLY_CAP=150`.~~ Written, but
-   **fetched by nothing** — see above. The live cap is still $40.
-4. Rewrite `/opt/telos/refresh-env.sh` on the instance over SSM to read the full
-   key list, then mirror it into `infra/telos-app.yaml` and extend
-   `$optionalKeys` in `deploy/deploy.ps1`. Until this happens the cap, the model
-   overrides, `SITE_URL` and `SUPPORT_EMAIL` all have no route to production.
-5. Decide on Sonnet 5 (needs step 4 first), and confirm Haiku + web search with
-   one live call.
+3. ~~`aws ssm put-parameter` for `TELOS_AI_MONTHLY_CAP=150`.~~ Done, and the live
+   cap is now $150 in the container.
+4. ~~Rewrite `/opt/telos/refresh-env.sh` on the instance and mirror it.~~ Done in
+   all three places; 11 of 11 files now in sync.
+5. Decide on Sonnet 5 — now actually runnable — and confirm Haiku + web search
+   with one live call.
 6. Then Part 2 of the payments spec.
 
-**Worth a separate look:** the six-versus-ten key drift was invisible from the
-repo, and it is the second time first-boot-only UserData has hidden a live
-defect. Anything that must exist on the running instance is worth verifying over
-SSM rather than read off the template — including, now, whether the rest of
-`/opt/telos/` matches what `infra/telos-app.yaml` says it should.
+**The drift audit is done and it came back clean.** All eleven files UserData
+creates were compared against the rendered template: ten matched, only
+`refresh-env.sh` had drifted, and it is now fixed. Worth knowing that `backup.sh`
+matched — the earlier session pushed it over SSM *and* mirrored the template, so
+the two-places rule demonstrably works when it is followed. Timers armed, backup
+last fired 19h before the audit.
+
+The habit worth keeping: anything that must exist on the running instance is
+verified over SSM, never read off the template. This was the second live defect
+caused by trusting the template, and the audit script that found it is worth
+re-running after any UserData change (`scratchpad/drift.py`, roughly 60 lines:
+render the `!Sub` block, extract each heredoc, diff against a `cat` of the same
+paths over SSM).
