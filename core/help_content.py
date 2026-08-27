@@ -26,6 +26,7 @@ HELP_CONTENT = {
             "Paste the full job description into the text area",
             "Click 'Score My Match'",
             "Review your match score, gaps, cert recommendations, and actions",
+            "Got an interview? Open the result in Match History and click 'Prep for this interview'",
         ],
         "tip": "The scam check runs automatically before scoring. Check the verdict before investing time in an application."
     },

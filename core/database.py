@@ -146,6 +146,24 @@ def init_db():
         )
     """)
 
+    # An interview prep costs about five cents to generate, so it is stored and
+    # reopened rather than regenerated. Keyed on the match result it was built
+    # from: the prep is an interpretation of one score, and must never outlive
+    # or contradict it.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS interview_preps (
+            id SERIAL PRIMARY KEY,
+            tester_name TEXT NOT NULL,
+            match_result_id INTEGER NOT NULL,
+            job_id INTEGER,
+            company TEXT,
+            role TEXT,
+            generated_at TEXT,
+            prep_json TEXT NOT NULL
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_prep_lookup ON interview_preps (tester_name, match_result_id)")
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS guide_progress (
             id SERIAL PRIMARY KEY,
@@ -415,11 +433,98 @@ def get_match_results(job_id: int, tester_name: str) -> list:
     conn.close()
     return [dict(row) for row in rows]
 
+def get_match_result(match_id: int, tester_name: str) -> Optional[dict]:
+    """One scored result, owner-scoped.
+
+    Interview prep is generated from a stored score, so it needs to fetch one
+    by id. Doing that without the owner in the WHERE clause would make a row
+    id enough to read someone else's resume and their gaps, which is the worst
+    thing in the database to leak.
+    """
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM match_results WHERE id = %s AND tester_name = %s",
+                   (match_id, tester_name))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return dict(row) if row else None
+
+
 @_guard_write(returns=None)
 def delete_match_result(match_id: int, tester_name: str):
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM match_results WHERE id = %s AND tester_name = %s", (match_id, tester_name))
+    # A prep is an interpretation of one score. Leaving it behind when the score
+    # goes would let someone reopen advice about a result they had deleted.
+    cursor.execute("DELETE FROM interview_preps WHERE match_result_id = %s AND tester_name = %s",
+                   (match_id, tester_name))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+# ------------------------------------------------------------ interview prep
+
+@_guard_write(returns=None)
+def save_interview_prep(tester_name: str, match_result_id: int, prep: dict,
+                        job_id: int = None, company: str = None, role: str = None):
+    """Store a generated prep so reopening it costs nothing.
+
+    One prep per scored result: regenerating replaces rather than accumulates,
+    so what the user reopens is always the latest reading of that score.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM interview_preps WHERE tester_name = %s AND match_result_id = %s",
+                   (tester_name, match_result_id))
+    cursor.execute("""
+        INSERT INTO interview_preps
+            (tester_name, match_result_id, job_id, company, role, generated_at, prep_json)
+        VALUES (%s, %s, %s, %s, %s, CURRENT_DATE::text, %s)
+    """, (tester_name, match_result_id, job_id, company, role, json.dumps(prep)))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_interview_prep(match_result_id: int, tester_name: str) -> Optional[dict]:
+    """The stored prep for one scored result, owner-scoped, or None."""
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute(
+        """SELECT * FROM interview_preps
+           WHERE match_result_id = %s AND tester_name = %s
+           ORDER BY id DESC LIMIT 1""",
+        (match_result_id, tester_name),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    if not row:
+        return None
+    return {"prep": json.loads(row["prep_json"]), "generated_at": row["generated_at"],
+            "company": row["company"], "role": row["role"]}
+
+
+def get_interview_preps(tester_name: str) -> list:
+    conn = get_connection()
+    cursor = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cursor.execute("SELECT * FROM interview_preps WHERE tester_name = %s ORDER BY id DESC",
+                   (tester_name,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@_guard_write(returns=None)
+def delete_interview_prep(match_result_id: int, tester_name: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM interview_preps WHERE match_result_id = %s AND tester_name = %s",
+                   (match_result_id, tester_name))
     conn.commit()
     cursor.close()
     conn.close()
@@ -575,6 +680,13 @@ def get_match_page_data(tester_name: str) -> dict:
     cursor.execute("SELECT * FROM match_results WHERE tester_name = %s ORDER BY scored_at DESC", (tester_name,))
     match_results = cursor.fetchall()
 
+    # Fetched here rather than per row: Match renders every historical result,
+    # and a query inside that loop is one round trip per score on the page.
+    # Ascending so that if a duplicate ever survives, the newest row wins the
+    # key rather than the oldest.
+    cursor.execute("SELECT * FROM interview_preps WHERE tester_name = %s ORDER BY id ASC", (tester_name,))
+    preps = cursor.fetchall()
+
     cursor.close()
     conn.close()
 
@@ -582,7 +694,12 @@ def get_match_page_data(tester_name: str) -> dict:
         "profile": dict(profile) if profile else None,
         "jobs": [dict(r) for r in jobs],
         "resume_versions": [dict(r) for r in resume_versions],
-        "match_results": [dict(r) for r in match_results]
+        "match_results": [dict(r) for r in match_results],
+        "interview_preps": {
+            r["match_result_id"]: {"prep": json.loads(r["prep_json"]),
+                                   "generated_at": r["generated_at"]}
+            for r in preps
+        },
     }
 
 def get_outcome_correlation(tester_name: str) -> list:
@@ -735,7 +852,8 @@ def revoke_all_sessions(tester_name: str):
 
 USER_TABLES = [
     "jobs", "profile", "resume_versions", "career_paths", "match_results",
-    "guide_progress", "critical_path", "user_plans", "usage_events", "user_sessions",
+    "interview_preps", "guide_progress", "critical_path", "user_plans",
+    "usage_events", "user_sessions",
 ]
 
 

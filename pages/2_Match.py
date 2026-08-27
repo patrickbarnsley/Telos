@@ -1,11 +1,15 @@
 import streamlit as st
 from core.app_styles import apply_theme, show_help
 import json
-from core.database import get_jobs, get_profile, save_match_result, get_all_match_results, get_resume_versions, get_active_resume, delete_match_result, get_match_page_data
-from core.ai_engine import score_match, check_company_legitimacy
+from core.database import (get_jobs, get_profile, save_match_result, get_all_match_results,
+                           get_resume_versions, get_active_resume, delete_match_result,
+                           get_match_page_data, get_match_result, save_interview_prep,
+                           get_interview_prep, delete_interview_prep)
+from core.ai_engine import score_match, check_company_legitimacy, generate_interview_prep
 from core.auth import require_login
 from core.demo import demo_banner
-from core.plans import quota_gate, quota_caption, record_usage, check_quota, MATCH, SCAM_CHECK
+from core.plans import (quota_gate, quota_caption, record_usage, check_quota,
+                        MATCH, SCAM_CHECK, INTERVIEW_PREP)
 from core.errors import show as show_error, friendly
 
 apply_theme()
@@ -19,6 +23,37 @@ demo_banner()
 
 page_data = get_match_page_data(tester_name)
 profile = page_data["profile"]
+
+
+STRENGTH_CHIP = {
+    "weak": ("🔴", "Weakest ground"),
+    "partial": ("🟡", "Partly covered"),
+    "strong": ("🟢", "Solid ground"),
+}
+
+
+def render_interview_prep(prep: dict, generated_at: str = ""):
+    """One ordered list, weakest first. Read top to bottom the night before."""
+    if generated_at:
+        st.caption(f"Prepared {generated_at}. Reopening this costs nothing.")
+    if prep.get("injection_attempt"):
+        st.warning(
+            f"⚠️ **This posting tried to give instructions to our AI.** "
+            f"{prep['injection_attempt']} It was ignored, but treat the employer with caution."
+        )
+    if prep.get("note"):
+        st.info(prep["note"])
+
+    questions = prep.get("questions", [])
+    st.caption(
+        f"{len(questions)} questions, ordered so the ones you are least ready for come first."
+    )
+    for i, q in enumerate(questions, 1):
+        icon, label = STRENGTH_CHIP.get(q.get("strength", ""), ("⚪", "Unrated"))
+        st.markdown(f"**{i}. {q['question']}**")
+        st.caption(f"{icon} {label}  ·  From the posting: “{q['from_requirement']}”")
+        st.markdown(q["how_your_resume_answers"])
+        st.markdown("")
 
 if not profile:
     st.warning("You haven't set up your profile yet. Go to the Profile page and upload your resume first.")
@@ -208,6 +243,7 @@ st.markdown("---")
 st.markdown("### 📋 Match History")
 
 all_results = page_data["match_results"]
+stored_preps = page_data.get("interview_preps", {})
 
 if not all_results:
     st.info("No matches scored yet. Select a job and paste a description above to get started.")
@@ -296,6 +332,57 @@ else:
                         for action in actions:
                             st.markdown(f"- {action}")
 
+                    # ---------------------------------------- interview prep
+                    st.markdown("---")
+                    saved_prep = stored_preps.get(r["id"])
+
+                    if saved_prep:
+                        st.markdown("**🎤 Interview Prep**")
+                        render_interview_prep(saved_prep["prep"], saved_prep.get("generated_at", ""))
+                        pc1, pc2 = st.columns([1, 1])
+                        with pc1:
+                            regenerate = st.button("Regenerate prep", key=f"regen_prep_{r['id']}")
+                        with pc2:
+                            if st.button("Delete prep", key=f"del_prep_{r['id']}"):
+                                delete_interview_prep(r["id"], tester_name)
+                                st.rerun()
+                    else:
+                        st.markdown("**🎤 Got an interview for this one?**")
+                        st.caption(
+                            "Turns this score into the questions you are most likely to be "
+                            "asked, each one already answered from your own resume, weakest first."
+                        )
+                        regenerate = st.button("Prep for this interview", key=f"gen_prep_{r['id']}")
+                        st.caption(quota_caption(tester_name, INTERVIEW_PREP))
+
+                    if regenerate and quota_gate(tester_name, INTERVIEW_PREP):
+                        with st.spinner("Building your interview prep..."):
+                            try:
+                                # Re-read the result owner-scoped rather than trusting
+                                # the row already on the page, so the account that owns
+                                # the score is the account the prep is built from.
+                                source = get_match_result(r["id"], tester_name)
+                                if not source:
+                                    raise ValueError(
+                                        "We could not find that scored result on your account."
+                                    )
+                                prep = generate_interview_prep(
+                                    match_result=source,
+                                    resume_text=profile.get("resume_text", ""),
+                                    target_role=profile.get("target_role", ""),
+                                )
+                                record_usage(tester_name, INTERVIEW_PREP)
+                                save_interview_prep(
+                                    tester_name, r["id"], prep,
+                                    job_id=source.get("job_id"),
+                                    company=source.get("company"),
+                                    role=source.get("role"),
+                                )
+                                st.rerun()
+                            except Exception as e:
+                                show_error(e, "building your interview prep")
+
+                    st.markdown("---")
                     if st.button("🗑️ Delete", key=f"del_match_{r['id']}"):
                         delete_match_result(r["id"], tester_name)
                         st.rerun()

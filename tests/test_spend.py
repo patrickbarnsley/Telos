@@ -54,7 +54,9 @@ src=(ROOT / "core" / "ai_engine.py").read_text(encoding="utf-8")
 import re
 direct=[l for l in src.split("\n") if "client.messages.create" in l and "_invoke" not in l]
 check("only one direct SDK call, inside _invoke", len(direct)==1, direct)
-check("all six features route through _invoke", src.count("= _invoke(") == 6, src.count("= _invoke("))
+# Bump this when a feature is added. That is the point of the check: a new AI
+# call that forgets the choke point should fail the suite, not ship quietly.
+check("all seven features route through _invoke", src.count("= _invoke(") == 7, src.count("= _invoke("))
 check("spend.guard runs before the request",
       src.index("spend.guard()") < src.index("message = client.messages.create(**kwargs)"))
 

@@ -27,6 +27,7 @@ SUITES = [
     ("auth", "test_app_auth.py", "Sign in, reset, session persistence, sign out"),
     ("account", "test_profile_account.py", "Data export, deletion, cross-user isolation"),
     ("spend", "test_spend.py", "AI cost accounting, monthly cap, error messages"),
+    ("prep", "test_interview_prep.py", "Interview prep quotas, ownership, honesty constraint"),
 ]
 
 DEFAULTS = {

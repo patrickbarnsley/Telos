@@ -20,6 +20,7 @@ ROADMAP = "roadmap"
 ADVISOR = "advisor"
 SCAM_CHECK = "scam_check"
 JD_EXTRACT = "jd_extract"
+INTERVIEW_PREP = "interview_prep"
 
 ACTION_LABELS = {
     MATCH: "match score",
@@ -27,6 +28,7 @@ ACTION_LABELS = {
     ADVISOR: "advisor message",
     SCAM_CHECK: "employer check",
     JD_EXTRACT: "screenshot extraction",
+    INTERVIEW_PREP: "interview prep",
 }
 
 UNLIMITED = -1
@@ -34,7 +36,8 @@ UNLIMITED = -1
 PLANS = {
     "free": {
         "label": "Free",
-        "limits": {MATCH: 10, ROADMAP: 1, ADVISOR: 0, SCAM_CHECK: 10, JD_EXTRACT: 10},
+        "limits": {MATCH: 10, ROADMAP: 1, ADVISOR: 0, SCAM_CHECK: 10, JD_EXTRACT: 10,
+                   INTERVIEW_PREP: 1},
     },
     # Pro allowances are set from what a fully-utilised subscriber costs to
     # serve, not from what sounds generous. At 100 scores and 200 advisor
@@ -42,16 +45,19 @@ PLANS = {
     # a margin; at the old 200 and 500 they did not.
     "pro": {
         "label": "Pro",
-        "limits": {MATCH: 100, ROADMAP: 10, ADVISOR: 200, SCAM_CHECK: 200, JD_EXTRACT: 200},
+        "limits": {MATCH: 100, ROADMAP: 10, ADVISOR: 200, SCAM_CHECK: 200, JD_EXTRACT: 200,
+                   INTERVIEW_PREP: 20},
     },
     "owner": {
         "label": "Owner",
         "limits": {MATCH: UNLIMITED, ROADMAP: UNLIMITED, ADVISOR: UNLIMITED,
-                   SCAM_CHECK: UNLIMITED, JD_EXTRACT: UNLIMITED},
+                   SCAM_CHECK: UNLIMITED, JD_EXTRACT: UNLIMITED,
+                   INTERVIEW_PREP: UNLIMITED},
     },
     "demo": {
         "label": "Demo",
-        "limits": {MATCH: 0, ROADMAP: 0, ADVISOR: 0, SCAM_CHECK: 0, JD_EXTRACT: 0},
+        "limits": {MATCH: 0, ROADMAP: 0, ADVISOR: 0, SCAM_CHECK: 0, JD_EXTRACT: 0,
+                   INTERVIEW_PREP: 0},
     },
 }
 
