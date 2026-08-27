@@ -403,7 +403,21 @@ switch ($Step) {
     # Optional: each has a sane default in code. They live in Parameter Store so
     # the AI budget or the model tier can be changed and picked up on the next
     # restart, without editing code or redeploying.
-    $optionalKeys = @('SITE_URL', 'SUPPORT_EMAIL', 'TELOS_AI_MONTHLY_CAP', 'TELOS_AI_MODEL')
+    #
+    # The per-action model keys override TELOS_AI_MODEL for one action only, so
+    # a single expensive action can be moved to a cheaper tier, or one action
+    # tried on a new model, without touching the rest.
+    #
+    # Adding a key here is only half the job. The instance reads an explicit
+    # list in /opt/telos/refresh-env.sh, which UserData writes on first boot and
+    # never rewrites, so the same name has to be added to the list in
+    # infra/telos-app.yaml AND pushed to the running instance over SSM. A key
+    # that is written here but missing there is stored correctly and read by
+    # nothing.
+    $optionalKeys = @('SITE_URL', 'SUPPORT_EMAIL', 'TELOS_AI_MONTHLY_CAP', 'TELOS_AI_MODEL',
+                      'TELOS_AI_MODEL_MATCH', 'TELOS_AI_MODEL_SCAM_CHECK',
+                      'TELOS_AI_MODEL_JD_EXTRACT', 'TELOS_AI_MODEL_ROADMAP',
+                      'TELOS_AI_MODEL_ADVISOR', 'TELOS_AI_MODEL_INTERVIEW_PREP')
 
     $prompts = @{
         ANTHROPIC_API_KEY    = 'Anthropic API key'
@@ -414,8 +428,14 @@ switch ($Step) {
         OWNER_EMAILS         = 'Your email (unmetered AI usage)'
         SITE_URL             = 'App URL used in confirmation and reset emails'
         SUPPORT_EMAIL        = 'Support address shown to users'
-        TELOS_AI_MONTHLY_CAP = 'Hard monthly AI budget in USD (default 40)'
-        TELOS_AI_MODEL       = 'Claude model id (default claude-opus-4-5)'
+        TELOS_AI_MONTHLY_CAP = 'Hard monthly AI budget in USD (default 150)'
+        TELOS_AI_MODEL       = 'Claude model id fallback (default claude-opus-4-5)'
+        TELOS_AI_MODEL_MATCH          = 'Model for match scoring (default claude-haiku-4-5)'
+        TELOS_AI_MODEL_SCAM_CHECK     = 'Model for employer checks (default claude-haiku-4-5)'
+        TELOS_AI_MODEL_JD_EXTRACT     = 'Model for screenshot extraction (default claude-haiku-4-5)'
+        TELOS_AI_MODEL_ROADMAP        = 'Model for roadmaps (default claude-sonnet-4-5)'
+        TELOS_AI_MODEL_ADVISOR        = 'Model for advisor chat (default claude-sonnet-4-5)'
+        TELOS_AI_MODEL_INTERVIEW_PREP = 'Model for interview prep (default claude-sonnet-4-5)'
     }
 
     function Save-Secret {

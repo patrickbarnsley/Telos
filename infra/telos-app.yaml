@@ -314,9 +314,19 @@ Resources:
           # parameter yields an empty value and the app falls back to its
           # default, so the AI budget or support address can be changed in
           # Parameter Store and picked up on the next restart, with no deploy.
+          #
+          # Editing this list is not enough on its own. UserData runs only on
+          # first boot, so a stack update rewrites the template and leaves the
+          # instance untouched: this file has to be pushed over SSM as well.
+          # That gap is not theoretical. It kept SITE_URL, SUPPORT_EMAIL,
+          # TELOS_AI_MONTHLY_CAP and TELOS_AI_MODEL out of the container for
+          # three days while all four looked correct in the repo.
           for KEY in ANTHROPIC_API_KEY DATABASE_URL SUPABASE_URL SUPABASE_ANON_KEY \
                      ADMIN_PASSWORD OWNER_EMAILS SITE_URL SUPPORT_EMAIL \
-                     TELOS_AI_MONTHLY_CAP TELOS_AI_MODEL; do
+                     TELOS_AI_MONTHLY_CAP TELOS_AI_MODEL \
+                     TELOS_AI_MODEL_MATCH TELOS_AI_MODEL_SCAM_CHECK \
+                     TELOS_AI_MODEL_JD_EXTRACT TELOS_AI_MODEL_ROADMAP \
+                     TELOS_AI_MODEL_ADVISOR TELOS_AI_MODEL_INTERVIEW_PREP; do
             VALUE=$(aws ssm get-parameter --name "/telos/$KEY" --with-decryption \
                       --query 'Parameter.Value' --output text --region "$REGION" 2>/dev/null || echo "")
             if [ -n "$VALUE" ]; then
