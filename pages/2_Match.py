@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme, show_help
+from core.app_styles import apply_theme, show_help, nav_rail, page_header, fit_bar
 import json
 from core.database import (get_jobs, get_profile, save_match_result, get_all_match_results,
                            get_resume_versions, get_active_resume, delete_match_result,
@@ -14,11 +14,11 @@ from core.errors import show as show_error, friendly
 
 apply_theme()
 
-st.title("🎯 Match")
-st.subheader("Score your resume against any job description")
-
 require_login()
 tester_name = st.session_state.tester_name
+
+nav_rail("Match")
+page_header("🎯 Match", "Score your resume against any job description, then prep for the interview.")
 demo_banner()
 
 page_data = get_match_page_data(tester_name)
@@ -304,6 +304,10 @@ else:
 
             with col_content:
                 with st.expander(f"**{label}** | {score_label} | {version} | {date}"):
+                    st.markdown(
+                        f'<div style="max-width:220px;margin-bottom:10px">{fit_bar(score)}</div>',
+                        unsafe_allow_html=True,
+                    )
                     st.markdown(f"**Summary:** {r['match_summary']}")
 
                     matched = json.loads(r["matched_reqs"]) if r["matched_reqs"] else []

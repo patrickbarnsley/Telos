@@ -1,6 +1,6 @@
 import json
 import streamlit as st
-from core.app_styles import apply_theme, show_help
+from core.app_styles import apply_theme, show_help, nav_rail, page_header
 from core.database import save_profile, get_profile, create_career_path, get_career_paths, delete_career_path, save_resume_version, get_resume_versions, set_active_resume, delete_resume_version, get_active_resume
 from core.models import Profile
 from core.ai_engine import extract_resume_text
@@ -11,11 +11,11 @@ from core.errors import show as show_error, friendly
 
 apply_theme()
 
-st.title("👤 Profile")
-st.subheader("Your career profile")
-
 require_login()
 tester_name = st.session_state.tester_name
+
+nav_rail("Profile")
+page_header("👤 Profile", "Your resume, your target role, and your account. Everything else builds on this.")
 demo_banner()
 
 tab1, tab2, tab3, tab4 = st.tabs(["Resumes", "Career Paths", "Target Role", "Account"])

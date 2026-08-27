@@ -1,6 +1,8 @@
 import streamlit as st
-from core.app_styles import apply_theme, show_help
-from core.database import create_job, get_jobs, update_job, delete_job, get_career_paths, get_company_stats, get_match_results
+from core.app_styles import (apply_theme, show_help, nav_rail, page_header,
+                             status_chip, fit_bar)
+from core.database import (create_job, get_jobs, update_job, delete_job, get_career_paths,
+                           get_company_stats, get_match_results, get_all_match_results)
 from core.models import Job
 from core.ai_engine import extract_jd_from_image
 from core.auth import require_login
@@ -10,11 +12,11 @@ from core.errors import show as show_error, friendly
 
 apply_theme()
 
-st.title("📋 Track")
-st.subheader("Your job pipeline")
-
 require_login()
 tester_name = st.session_state.tester_name
+
+nav_rail("Track")
+page_header("📋 Track", "Every job you are pursuing, and what the pipeline is actually doing.")
 demo_banner()
 
 STATUSES = ["applied", "screening", "interview", "offer", "rejected", "withdrawn", "recruiter_outreach"]
@@ -35,6 +37,47 @@ def fmt_salary(lo, hi):
 jobs = get_jobs(tester_name)
 career_paths = get_career_paths(tester_name)
 path_names = ["None"] + [p["path_name"] for p in career_paths]
+
+# Best score per job, read once. The pipeline table shows a fit bar beside every
+# row, and a query per row would be one round trip per job on the page.
+best_fit = {}
+for _m in get_all_match_results(tester_name):
+    _jid = _m.get("job_id")
+    if _jid is None:
+        continue
+    _score = _m.get("overall_score")
+    if _score is not None and _score > best_fit.get(_jid, -1):
+        best_fit[_jid] = _score
+
+
+def pipeline_table(rows):
+    """The pipeline as something you can scan, not a list of sentences.
+
+    Company and role stacked in one cell so the eye lands on the employer
+    first; the status as a chip rather than a bare word; the fit score as a
+    number you can compare and a bar you can scan without reading.
+    """
+    html = ['<div class="prow-head"><div>Company &amp; role</div><div>Status</div>'
+            '<div>Best fit</div><div>Updated</div></div>']
+    for j in rows:
+        company = html_escape(j["company"])
+        role = html_escape(j["role"])
+        updated = html_escape(j.get("date_updated") or j.get("date_applied") or "--")
+        html.append(
+            '<div class="prow">'
+            f'<div><div class="prow-co">{company}</div><div class="prow-role">{role}</div></div>'
+            f'<div>{status_chip(j["status"])}</div>'
+            f'<div>{fit_bar(best_fit.get(j["id"]))}</div>'
+            f'<div class="prow-date num">{updated}</div>'
+            '</div>'
+        )
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def html_escape(value) -> str:
+    """Company and role are user-entered, and they are being put into markup."""
+    import html as _html
+    return _html.escape(str(value if value is not None else ""))
 
 tab1, tab2 = st.tabs(["Pipeline", "Companies"])
 
@@ -185,8 +228,18 @@ with tab1:
             filter_path_id = next((p["id"] for p in career_paths if p["path_name"] == filter_path), None)
             filtered_jobs = [j for j in filtered_jobs if j.get("career_path_id") == filter_path_id]
 
+        if not filtered_jobs:
+            st.info("No jobs match those filters.")
+        else:
+            pipeline_table(filtered_jobs)
+            st.markdown("---")
+            st.caption("Open a job below to edit it.")
+
         for job in filtered_jobs:
-            with st.expander(f"**{job['company']}** - {job['role']} | {job['status'].replace('_', ' ').capitalize()}"):
+            fit = best_fit.get(job["id"])
+            fit_label = f" | {fit}% fit" if fit is not None else ""
+            with st.expander(f"**{job['company']}** - {job['role']} | "
+                             f"{job['status'].replace('_', ' ').capitalize()}{fit_label}"):
                 col1, col2 = st.columns([4, 1])
 
                 with col1:

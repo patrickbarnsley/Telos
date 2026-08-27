@@ -4,7 +4,7 @@ import os
 import hmac
 import psycopg2.extras
 import pandas as pd
-from core.app_styles import apply_theme
+from core.app_styles import apply_theme, nav_rail
 from core.auth import require_login
 from core.plans import is_owner
 from core.database import get_connection, get_all_outcome_correlations, get_usage_over_time
@@ -75,6 +75,10 @@ if not st.session_state.admin_auth:
             remaining = 5 - st.session_state.admin_attempts
             st.error(f"Incorrect password. {remaining} attempt(s) remaining.")
     st.stop()
+
+# Rendered only past every gate, so a visitor who is refused sees nothing but
+# the not-found page.
+nav_rail("Admin")
 
 st.success(f"Admin session active - {_tester}")
 

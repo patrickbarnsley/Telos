@@ -1,18 +1,22 @@
 import streamlit as st
-from core.app_styles import apply_theme, show_help
-from core.database import init_db
+from core.app_styles import apply_theme, show_help, nav_rail
+from core.database import init_db, get_profile
 from core.auth import (sign_in, sign_up, send_password_reset, verify_recovery,
                        set_password_with_client, remember_session, resume_session,
                        forget_session, MIN_PASSWORD)
 from core.demo import enter_demo, is_demo, DEMO_EMAIL
 from core.plans import (get_plan, plan_label, join_waitlist, used_this_month,
-                        limit_for, PLANS, MATCH, ROADMAP, UNLIMITED, SUPPORT_EMAIL)
+                        limit_for, PLANS, MATCH, ROADMAP, INTERVIEW_PREP,
+                        UNLIMITED, SUPPORT_EMAIL)
 
 st.set_page_config(
     page_title="Telos: Know what to fix before you apply again",
     page_icon="🎯",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    # The left rail is the app's navigation, so it starts open. Collapsed, the
+    # product had no visible shape and Profile was effectively unreachable for
+    # someone who did not already know it existed.
+    initial_sidebar_state="expanded",
 )
 
 apply_theme()
@@ -255,6 +259,8 @@ with top_r:
         st.query_params.clear()
         st.rerun()
 
+nav_rail("Home")
+
 st.markdown('<div class="hero-title"><span class="logo-mark"></span><span class="hero-accent">Telos</span></div>', unsafe_allow_html=True)
 st.markdown('<div class="hero-sub">Your career campaign, organized.</div>', unsafe_allow_html=True)
 
@@ -272,17 +278,32 @@ else:
     plan = get_plan(tester_name)
     if plan != "owner":
         m_lim, r_lim = limit_for(tester_name, MATCH), limit_for(tester_name, ROADMAP)
-        c1, c2, c3 = st.columns(3)
+        p_lim = limit_for(tester_name, INTERVIEW_PREP)
+        c1, c2, c3, c4 = st.columns(4)
         c1.metric("Match scores this month", f"{used_this_month(tester_name, MATCH)} / {m_lim}")
         c2.metric("Roadmaps this month", f"{used_this_month(tester_name, ROADMAP)} / {r_lim}")
-        c3.metric("Job tracking", "Unlimited")
+        c3.metric("Interview preps this month", f"{used_this_month(tester_name, INTERVIEW_PREP)} / {p_lim}")
+        c4.metric("Job tracking", "Unlimited")
 
 st.markdown("---")
+
+# Profile first, and called out when it is empty. Everything else in the app
+# needs a resume, so a new user who lands anywhere else hits a wall.
+if not is_demo() and not get_profile(tester_name):
+    st.markdown(
+        '<div class="demo-bar">👤 <strong>Start with your Profile.</strong> '
+        'Upload your resume and set a target role, and Track, Match and Guide all '
+        'start working. It takes about a minute.</div>',
+        unsafe_allow_html=True
+    )
+    st.page_link("pages/0_Profile.py", label="👤  Set up your Profile")
+    st.markdown("---")
+
 st.markdown("### Where to next?")
 
 st.page_link("pages/0_Profile.py", label="👤  Profile: Upload your resume and set your target role")
 st.page_link("pages/1_Track.py", label="☑️  Track: Log every job and manage your pipeline")
-st.page_link("pages/2_Match.py", label="🎯  Match: Score your resume against any job description")
+st.page_link("pages/2_Match.py", label="🎯  Match: Score your resume, then prep for the interview")
 st.page_link("pages/3_Guide.py", label="🗺️  Guide: Get your AI-powered critical path to your goal")
 
 if is_demo():

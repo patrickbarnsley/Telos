@@ -1,5 +1,5 @@
 import streamlit as st
-from core.app_styles import apply_theme, show_help
+from core.app_styles import apply_theme, show_help, nav_rail, page_header
 import json
 from core.database import get_profile, get_all_match_results, save_milestone_progress, get_milestone_progress, save_critical_path, get_critical_path, get_career_paths, get_resume_versions, get_guide_data
 from core.ai_engine import generate_critical_path, chat_with_advisor
@@ -10,11 +10,11 @@ from core.errors import show as show_error, friendly
 
 apply_theme()
 
-st.title("🗺️ Guide")
-st.subheader("Your career skill tree")
-
 require_login()
 tester_name = st.session_state.tester_name
+
+nav_rail("Guide")
+page_header("🗺️ Guide", "The critical path from where you are to the role you are aiming at.")
 demo_banner()
 
 guide_data = get_guide_data(tester_name)
