@@ -29,6 +29,7 @@ SUITES = [
     ("spend", "test_spend.py", "AI cost accounting, monthly cap, error messages"),
     ("prep", "test_interview_prep.py", "Interview prep quotas, ownership, honesty constraint"),
     ("chrome", "test_ui_chrome.py", "Navigation, headers, status chips, colour contrast"),
+    ("safety", "test_prompt_safety.py", "Prompt injection, output validation, advisor scope"),
 ]
 
 DEFAULTS = {

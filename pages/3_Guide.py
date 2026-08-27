@@ -33,6 +33,10 @@ sub_paths = [p for p in career_paths if p["path_type"] == "sub"]
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = {}
+# Consecutive off-topic messages, per path. Session-scoped on purpose: this is
+# meant to stop a pattern inside one sitting, not to follow anyone around.
+if "advisor_offtopic" not in st.session_state:
+    st.session_state.advisor_offtopic = {}
 if "active_path_id" not in st.session_state:
     st.session_state.active_path_id = None
 
@@ -189,17 +193,26 @@ if saved:
                         for m in st.session_state.chat_history[chat_key][:-1]
                     ]
 
-                    response = chat_with_advisor(
+                    reply = chat_with_advisor(
                         profile=path_context,
                         critical_path=cp,
                         conversation_history=api_history,
-                        user_message=user_input
+                        user_message=user_input,
+                        consecutive_offtopic=st.session_state.advisor_offtopic.get(chat_key, 0),
                     )
-                    record_usage(tester_name, ADVISOR)
+                    st.session_state.advisor_offtopic[chat_key] = reply["consecutive_offtopic"]
+
+                    # A blocked turn never reached the API, so it never cost
+                    # anything and must not count against the user's allowance.
+                    if reply["billed"]:
+                        record_usage(tester_name, ADVISOR)
+
+                    response = reply["text"]
                     st.markdown(response)
                     st.session_state.chat_history[chat_key].append({"role": "assistant", "content": response})
 
-                    if any(phrase in user_input.lower() for phrase in ["update my roadmap", "update the roadmap", "regenerate", "update my critical path"]):
+                    if (any(phrase in user_input.lower() for phrase in ["update my roadmap", "update the roadmap", "regenerate", "update my critical path"])
+                            and not reply["off_topic"]):
                         with st.spinner("Updating your roadmap..."):
                             new_path = generate_critical_path(path_context, match_history)
                             record_usage(tester_name, ROADMAP)
