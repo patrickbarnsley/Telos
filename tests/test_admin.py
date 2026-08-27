@@ -2,7 +2,11 @@ import os, sys
 os.environ.update({"DATABASE_URL":os.environ.get("DATABASE_URL","postgresql://postgres:postgres@localhost:5432/telos_test"),
  "OWNER_EMAILS":"patrickbarnsley@gmail.com","ANTHROPIC_API_KEY":"sk-test",
  "SUPABASE_URL":"https://example.supabase.co","SUPABASE_ANON_KEY":"k","ADMIN_PASSWORD":"correct-horse"})
-sys.path.insert(0,"/home/claude/Telos")
+import pathlib as _pathlib
+# Locate the repo from this file rather than a fixed absolute path, so the
+# suite runs from any checkout instead of only /home/claude/Telos.
+_ROOT = _pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 from streamlit.testing.v1 import AppTest
 from core.database import init_db
 init_db()
@@ -13,7 +17,7 @@ def check(n,c,extra=""):
     if not c: FAIL.append(n)
 
 def run(session):
-    at=AppTest.from_file("/home/claude/Telos/pages/4_Admin.py", default_timeout=60)
+    at=AppTest.from_file(str(_ROOT / "pages/4_Admin.py"), default_timeout=60)
     for k,v in session.items(): at.session_state[k]=v
     at.run(); return at
 

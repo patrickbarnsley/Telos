@@ -36,9 +36,13 @@ PLANS = {
         "label": "Free",
         "limits": {MATCH: 10, ROADMAP: 1, ADVISOR: 0, SCAM_CHECK: 10, JD_EXTRACT: 10},
     },
+    # Pro allowances are set from what a fully-utilised subscriber costs to
+    # serve, not from what sounds generous. At 100 scores and 200 advisor
+    # messages a month, a $19 subscriber who uses every allowance still leaves
+    # a margin; at the old 200 and 500 they did not.
     "pro": {
         "label": "Pro",
-        "limits": {MATCH: 200, ROADMAP: 10, ADVISOR: 500, SCAM_CHECK: 200, JD_EXTRACT: 200},
+        "limits": {MATCH: 100, ROADMAP: 10, ADVISOR: 200, SCAM_CHECK: 200, JD_EXTRACT: 200},
     },
     "owner": {
         "label": "Owner",

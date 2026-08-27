@@ -25,18 +25,58 @@ def _get_client():
 # a convention: a new feature cannot forget to check it, because there is only
 # one door.
 #
-# MODEL is a single knob on purpose. Opus is the most capable and the most
-# expensive tier ($5 in / $25 out per million tokens). Sonnet is 2.5x cheaper
-# and Haiku 5x cheaper on output; if AI cost becomes the binding constraint,
-# this is the line to change, and TELOS_AI_MODEL changes it without a deploy.
+# MODEL is the fallback for any action that is not routed below. Opus is the
+# most capable and the most expensive tier ($5 in / $25 out per million tokens).
 MODEL = os.getenv("TELOS_AI_MODEL", "claude-opus-4-5")
+
+
+# --- Per-action model routing ------------------------------------------------
+# Running every action on Opus was the difference between a viable subscription
+# and one that lost money on its heaviest users. The work is not all the same
+# shape: pulling requirements out of a posting is bulk extraction and Haiku does
+# it at a fifth of Opus's output price, while a roadmap or an interview prep is
+# the reasoning people are actually paying for and belongs on Sonnet.
+#
+# Model ids checked against the live model list on 2026-08-26. claude-haiku-4-5
+# and claude-sonnet-4-5 are both current, and core/spend.py already prices both,
+# so the ledger stays correct without a change there. A newer claude-sonnet-5
+# exists at a lower per-token price but reasons by default, which makes its
+# output-token cost unpredictable against the margin these numbers were chosen
+# for; the env overrides below make that a one-line experiment, not a rewrite.
+ACTION_MODELS = {
+    "match":          "claude-haiku-4-5",
+    "scam_check":     "claude-haiku-4-5",
+    "jd_extract":     "claude-haiku-4-5",
+    "roadmap":        "claude-sonnet-4-5",
+    "advisor":        "claude-sonnet-4-5",
+    "interview_prep": "claude-sonnet-4-5",
+}
+
+
+def model_for(action: str) -> str:
+    """Resolve the model for one action.
+
+    Each action is overridable on its own, following the TELOS_AI_MODEL
+    pattern: TELOS_AI_MODEL_MATCH, TELOS_AI_MODEL_ROADMAP and so on. Cost
+    tuning is the kind of thing you want to do at 9pm against a live bill,
+    and needing a deploy to do it means it does not get done.
+
+    The environment is read per call rather than at import so a value set
+    after this module loads still takes effect.
+    """
+    if not action:
+        return MODEL
+    override = os.getenv(f"TELOS_AI_MODEL_{action.upper()}", "").strip()
+    if override:
+        return override
+    return ACTION_MODELS.get(action, MODEL)
 
 
 def _invoke(client, action: str = "", tester_name: str = "", **kwargs):
     """Guarded, metered wrapper around the Messages API."""
     from core import spend
     spend.guard()
-    kwargs.setdefault("model", MODEL)
+    kwargs.setdefault("model", model_for(action))
     message = client.messages.create(**kwargs)
     try:
         spend.record_usage_cost(kwargs["model"], getattr(message, "usage", None),

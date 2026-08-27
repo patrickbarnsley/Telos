@@ -38,11 +38,16 @@ WEB_SEARCH_COST = 10.00 / 1000  # USD per search
 
 
 def monthly_cap() -> float:
-    """Hard ceiling in USD for a calendar month. Set TELOS_AI_MONTHLY_CAP to change."""
+    """Hard ceiling in USD for a calendar month. Set TELOS_AI_MONTHLY_CAP to change.
+
+    The ceiling exists to stop a runaway loop, not to cap growth. At $40 it
+    tripped somewhere around a hundred heavy free users and took AI away from
+    paying customers, which is a worse outcome than the bill it prevented.
+    """
     try:
-        return float(os.getenv("TELOS_AI_MONTHLY_CAP", "40"))
+        return float(os.getenv("TELOS_AI_MONTHLY_CAP", "150"))
     except ValueError:
-        return 40.0
+        return 150.0
 
 
 def _price_for(model: str) -> dict:

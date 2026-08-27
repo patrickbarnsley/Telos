@@ -3,7 +3,11 @@ os.environ.setdefault("DATABASE_URL","postgresql://postgres:postgres@localhost:5
 os.environ.setdefault("ANTHROPIC_API_KEY","sk-test")
 os.environ.setdefault("SUPABASE_URL","https://example.supabase.co")
 os.environ.setdefault("SUPABASE_ANON_KEY","test-anon-key")
-sys.path.insert(0,"/home/claude/Telos")
+import pathlib as _pathlib
+# Locate the repo from this file rather than a fixed absolute path, so the
+# suite runs from any checkout instead of only /home/claude/Telos.
+_ROOT = _pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 from streamlit.testing.v1 import AppTest
 from core.database import init_db, create_job, export_user_data, purge_user_data, get_jobs
 from core.models import Job
@@ -19,7 +23,7 @@ USER="acct-test@example.com"
 OTHER="bystander@example.com"
 
 print("\n[1] Profile page renders for a signed-in user")
-at = AppTest.from_file("/home/claude/Telos/pages/0_Profile.py", default_timeout=60)
+at = AppTest.from_file(str(_ROOT / "pages/0_Profile.py"), default_timeout=60)
 at.session_state["user_email"]=USER; at.session_state["tester_name"]=USER
 at.run()
 check("no exception", not at.exception, at.exception)
@@ -29,7 +33,7 @@ check("sign out everywhere", "Sign out of all devices" in btns, btns)
 check("delete button", "Permanently delete my account" in btns, btns)
 
 print("\n[2] demo visitor cannot use any of it")
-at2 = AppTest.from_file("/home/claude/Telos/pages/0_Profile.py", default_timeout=60)
+at2 = AppTest.from_file(str(_ROOT / "pages/0_Profile.py"), default_timeout=60)
 at2.session_state["user_email"]="demo@usetelosapp.com"; at2.session_state["tester_name"]="__demo__"
 at2.run()
 check("no exception", not at2.exception, at2.exception)
@@ -38,7 +42,7 @@ disabled = {b.label: b.disabled for b in at2.button if b.label in
 check("all three disabled in demo", all(disabled.values()) and len(disabled)==3, disabled)
 
 print("\n[3] delete requires typing DELETE")
-at3 = AppTest.from_file("/home/claude/Telos/pages/0_Profile.py", default_timeout=60)
+at3 = AppTest.from_file(str(_ROOT / "pages/0_Profile.py"), default_timeout=60)
 at3.session_state["user_email"]=USER; at3.session_state["tester_name"]=USER
 at3.run()
 create_job(Job(company="Acme", role="PM", status="applied", notes="keep me"), USER)

@@ -1,7 +1,11 @@
 import os, sys, json
 os.environ.setdefault("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/telos_test")
 os.environ["OWNER_EMAILS"] = "patrickbarnsley@gmail.com"
-sys.path.insert(0, "/home/claude/Telos")
+import pathlib as _pathlib
+# Locate the repo from this file rather than a fixed absolute path, so the
+# suite runs from any checkout instead of only /home/claude/Telos.
+_ROOT = _pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 
 from core import database as db
 from core import plans

@@ -107,11 +107,16 @@ match history stays clean enough to be worth analysing later.
 |---|---|---|
 | Job tracking | Unlimited | Unlimited |
 | Pipeline metrics | Unlimited | Unlimited |
-| AI match scores | 10 / month | 200 / month |
+| AI match scores | 10 / month | 100 / month |
 | Career roadmaps | 1 / month | 10 / month |
-| Advisor chat | Not included | Unlimited |
+| Interview prep | 1 / month | 20 / month |
+| Advisor chat | Not included | 200 messages / month |
 | Employer scam checks | 10 / month | 200 / month |
 | Outcome analytics | Not included | Included |
+
+Every Pro number is a number Telos can actually serve. "Unlimited" against a
+metered API is a promise that gets withdrawn the first month someone tests it,
+so nothing here is unlimited except the parts that cost nothing to serve.
 
 Pro is not taking payments yet. It exists as a defined tier with a waitlist so that
 demand can be measured before payment infrastructure is built.

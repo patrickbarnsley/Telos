@@ -4,7 +4,11 @@ os.environ["OWNER_EMAILS"] = "patrickbarnsley@gmail.com"
 os.environ["ANTHROPIC_API_KEY"] = "sk-test-not-used"
 os.environ["SUPABASE_URL"] = "https://example.supabase.co"
 os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
-sys.path.insert(0, "/home/claude/Telos")
+import pathlib as _pathlib
+# Locate the repo from this file rather than a fixed absolute path, so the
+# suite runs from any checkout instead of only /home/claude/Telos.
+_ROOT = _pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_ROOT))
 from streamlit.testing.v1 import AppTest
 
 FAIL = []
@@ -13,7 +17,7 @@ def check(n, c, extra=""):
     if not c: FAIL.append(n)
 
 def run(path, session=None, timeout=60):
-    at = AppTest.from_file("/home/claude/Telos/"+path, default_timeout=timeout)
+    at = AppTest.from_file(str(_ROOT / path), default_timeout=timeout)
     if session:
         for k, v in session.items():
             at.session_state[k] = v
@@ -79,7 +83,7 @@ caps = " ".join(str(c.value) for c in at.caption)
 check("capped user sees usage caption", "10 of 10" in caps or "used this month" in caps, caps[:200])
 
 # ---------- waitlist deep link ----------
-at = AppTest.from_file("/home/claude/Telos/app.py", default_timeout=60)
+at = AppTest.from_file(str(_ROOT / "app.py"), default_timeout=60)
 at.query_params["waitlist"] = "1"
 at.run()
 check("waitlist deep link renders", not at.exception, str(at.exception))
