@@ -116,3 +116,13 @@ export interface BillingState {
   /** Empty when Telos is not charging. The client then shows no paywall. */
   prices: OfferedPrice[]
 }
+
+/** One row of GET /api/jobs/stats: everything pursued at a single employer. */
+export interface CompanyStat {
+  company: string
+  total_applications: number
+  total_match_runs: number
+  best_score: number | null
+  first_applied: string | null
+  last_activity: string | null
+}

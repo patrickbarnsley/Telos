@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../api/client'
 import type { MatchResult, ScamVerdict } from '../api/types'
@@ -25,6 +25,20 @@ export function Match() {
     }),
   })
 
+  // A screenshot is the least reliable input Telos takes, so the transcription
+  // lands in the textarea for the user to read rather than going straight to
+  // scoring. Nothing is saved until they choose to score it.
+  const fileRef = useRef<HTMLInputElement>(null)
+  const [transcribed, setTranscribed] = useState(false)
+  const fromImage = useMutation({
+    mutationFn: (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return api.upload<{ jd_text: string }>('/api/match/from-image', form)
+    },
+    onSuccess: r => { setJd(r.jd_text); setTranscribed(true) },
+  })
+
   const score = useMutation({
     mutationFn: () => api.post<MatchResult>('/api/match', {
       jd_text: jd, company: company || null, role: role || null,
@@ -42,15 +56,37 @@ export function Match() {
         </div>
       </div>
 
-      <ErrorNote error={scam.error ?? score.error} />
+      <ErrorNote error={fromImage.error ?? scam.error ?? score.error} />
 
       <div style={{ display: 'grid', gap: 20, gridTemplateColumns: 'minmax(0,1fr)' }}>
         <Panel title="Score a posting">
           <label className="field">
             <span>Job description</span>
-            <textarea value={jd} onChange={e => setJd(e.target.value)}
+            <textarea value={jd}
+                      onChange={e => { setJd(e.target.value); setTranscribed(false) }}
                       placeholder="Paste the full posting here." />
           </label>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10,
+                        flexWrap: 'wrap', marginBottom: 14 }}>
+            <input ref={fileRef} id="jd-image" type="file" accept="image/*"
+                   style={{ display: 'none' }}
+                   onChange={e => {
+                     const f = e.target.files?.[0]
+                     if (f) fromImage.mutate(f)
+                     e.target.value = ''
+                   }} />
+            <button className="btn ghost sm" disabled={fromImage.isPending}
+                    onClick={() => fileRef.current?.click()}>
+              {fromImage.isPending ? 'Reading the image…' : 'Or upload a screenshot'}
+            </button>
+            {transcribed && (
+              <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
+                Read from the image. Check it before scoring, then edit anything
+                that came out wrong.
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             <label className="field" style={{ flex: '1 1 180px' }}>
               <span>Company (optional)</span>

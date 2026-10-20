@@ -20,7 +20,8 @@ function check(label, ok, detail = '') {
 }
 
 function sql(q) {
-  return execSync(`psql -U postgres -h localhost -d telos_ci -tAc "${q}"`, { encoding: 'utf8' }).trim()
+  return execSync(`psql -U postgres -h localhost -d telos_ci -tAc "${q}"`,
+                  { encoding: 'utf8' }).trim()
 }
 
 const ACCOUNT = 'demo.board@telos.test'
@@ -28,6 +29,24 @@ const token = execSync(
   `cd ${REPO} && DATABASE_URL=postgresql://postgres@localhost:5432/telos_ci ` +
   `python3 -c "import sys;sys.path.insert(0,'.');from core.auth import remember_session;` +
   `print(remember_session('${ACCOUNT}'))"`, { encoding: 'utf8' }).trim()
+
+// Seed the fixture this suite asserts against. It used to assume telos_ci
+// already held the right rows, which made the whole board section depend on
+// whatever a previous run happened to leave behind: on a fresh database it
+// failed with zero columns and looked like a broken board rather than a missing
+// fixture. The suite now creates what it needs and leaves the account the way
+// it found it.
+const SEED = [
+  ['Kestrel', 'Associate PM', 'screening'],
+  ['Northwind', 'Technical Program Manager', 'applied'],
+  ['Cobalt', 'Delivery Manager', 'interview'],
+  ['Vantage', 'Product Operations Manager', 'applied'],
+]
+sql(`DELETE FROM jobs WHERE tester_name='${ACCOUNT}'`)
+for (const [company, role, status] of SEED) {
+  sql(`INSERT INTO jobs (tester_name, company, role, status) ` +
+      `VALUES ('${ACCOUNT}', '${company}', '${role}', '${status}')`)
+}
 
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' })
 
@@ -122,6 +141,32 @@ await app.reload({ waitUntil: 'networkidle' })
 await app.getByRole('button', { name: 'List' }).click()
 await app.waitForTimeout(400)
 check('the list renders a row per role', await app.locator('table.data tbody tr').count() > 0)
+
+// ------------------------------------------------- 6. the two newest screens
+console.log('\n[6] companies view, and reading a posting from a screenshot')
+await app.goto(APP + '/', { waitUntil: 'networkidle' })
+await app.getByRole('button', { name: 'Companies' }).click()
+await app.waitForTimeout(700)
+const rows = await app.locator('table.data tbody tr').count()
+check('the companies view lists one row per employer', rows === SEED.length,
+      `${rows} rows for ${SEED.length} companies`)
+check('and names a company that was seeded',
+      await app.getByText('Kestrel', { exact: false }).count() > 0)
+
+// The totals have to agree with the database, or the view is decoration.
+const distinct = Number(sql(
+  `SELECT count(DISTINCT company) FROM jobs WHERE tester_name='${ACCOUNT}'`))
+check('the row count matches the database', rows === distinct, `${rows} vs ${distinct}`)
+
+await app.goto(APP + '/match', { waitUntil: 'networkidle' })
+await app.waitForTimeout(400)
+check('Match offers the screenshot route in as well as pasting',
+      await app.getByRole('button', { name: /upload a screenshot/i }).count() === 1)
+check('the file input accepts images only',
+      await app.locator('input#jd-image[type=file][accept="image/*"]').count() === 1)
+// A screenshot must never be scored without a human reading it first.
+check('scoring stays disabled until there is text to score',
+      await app.getByRole('button', { name: /Score this role/ }).isDisabled())
 
 // ------------------------------------------------------------ 5. sign out
 console.log('\n[5] signing out actually ends the session')

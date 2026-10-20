@@ -5,10 +5,10 @@ import {
   useDraggable, useDroppable, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { api } from '../api/client'
-import type { Job, MatchResult, Status } from '../api/types'
-import { Chip, Empty, ErrorNote, FitBar, StatStrip, STATUSES, statusLabel } from '../components/ui'
+import type { CompanyStat, Job, MatchResult, Status } from '../api/types'
+import { Chip, Empty, ErrorNote, FitBar, Panel, StatStrip, STATUSES, statusLabel } from '../components/ui'
 
-type View = 'board' | 'list'
+type View = 'board' | 'list' | 'companies'
 
 function Card({ job, dragging }: { job: Job; dragging?: boolean }) {
   return (
@@ -47,6 +47,14 @@ function Column({ status, jobs }: { status: Status; jobs: Job[] }) {
 export function Pipeline() {
   const qc = useQueryClient()
   const [view, setView] = useState<View>('board')
+
+  // Only asked for when the tab is open. The query joins jobs to match_results
+  // across the whole account, which is not worth running to render a board.
+  const stats = useQuery({
+    queryKey: ['job-stats'],
+    queryFn: () => api.get<{ companies: CompanyStat[] }>('/api/jobs/stats'),
+    enabled: view === 'companies',
+  })
   const [active, setActive] = useState<Job | null>(null)
 
   const { data, isLoading, error } = useQuery({
@@ -115,6 +123,7 @@ export function Pipeline() {
           <div className="seg" role="group" aria-label="View">
             <button aria-pressed={view === 'board'} onClick={() => setView('board')}>Board</button>
             <button aria-pressed={view === 'list'} onClick={() => setView('list')}>List</button>
+            <button aria-pressed={view === 'companies'} onClick={() => setView('companies')}>Companies</button>
           </div>
         </div>
       </div>
@@ -162,6 +171,45 @@ export function Pipeline() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {view === 'companies' && (
+        <Panel title="By company">
+          {stats.isLoading && <Empty>Working out the totals…</Empty>}
+          {stats.data && stats.data.companies.length === 0 && (
+            <Empty>Nothing tracked yet. Add a role and this fills in.</Empty>
+          )}
+          {stats.data && stats.data.companies.length > 0 && (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Roles</th>
+                    <th>Scored</th>
+                    <th>Best fit</th>
+                    <th>Last activity</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stats.data.companies.map(c => (
+                    <tr key={c.company}>
+                      <td>{c.company}</td>
+                      <td className="mono">{c.total_applications}</td>
+                      <td className="mono">{c.total_match_runs}</td>
+                      <td style={{ minWidth: 120 }}>
+                        <FitBar score={c.best_score} />
+                      </td>
+                      <td className="mono" style={{ color: 'var(--muted)' }}>
+                        {c.last_activity ? String(c.last_activity).slice(0, 10) : '\u2014'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
       )}
     </>
   )
