@@ -29,3 +29,10 @@ telos-site/
 telos-secrets.txt
 *secrets*.txt
 *.secrets
+
+# One-off AWS SSM payloads from the backup repair. Operational scratch, and they
+# name a live instance id, which has no business in a public repo.
+fix-backup*.json
+
+# Local editor/agent settings, specific to one machine.
+.claude/
