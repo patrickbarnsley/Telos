@@ -66,3 +66,45 @@ restarts the instance rather than replacing it, so cloud-init never re-runs and
 template changes silently never reach the running box. Anything in this list
 that looks like it should happen automatically will not. Apply it on the
 instance and verify from inside the container.
+
+
+---
+
+## Deployed 20 October 2026
+
+Live at **https://beta.usetelosapp.com**. Production Streamlit never dropped a
+request: 200 immediately before the change and 200 immediately after.
+
+What the written plan did not account for:
+
+- **Caddy runs in a container**, so `/srv/beta` on the host was invisible to it.
+  It needs `- /srv/beta:/srv/beta:ro` in the compose volumes, which means Caddy
+  is recreated rather than reloaded. A recreate, not a reload, is the one moment
+  production is exposed; it was measured and nothing dropped.
+- **No git and no node on the instance.** It cannot pull from GitHub or build
+  the frontend. The bundle is built elsewhere and shipped: tar to
+  `s3://telos-deploy-082867429081/beta/`, fetched on the box with `aws s3 cp`.
+- **The API needs its own image.** `Dockerfile` copies `app.py` and `pages/`
+  and runs Streamlit. `Dockerfile.api` copies only `api/` and `core/` and runs
+  uvicorn, so an accidental Streamlit import fails at build rather than in front
+  of a user.
+- The API source lives at `/opt/telos/beta-api`, deliberately separate from
+  `/opt/telos/app`, so a beta deploy cannot alter what production runs.
+
+### Verified after deploy
+
+- `GET /api/health` returns `{"ok":true}` over the public internet
+- `GET /api/me` without a cookie returns 401, not 500
+- a deep route such as `/account` serves `index.html`, so a refresh is not a 404
+- assets carry `max-age=31536000, immutable`; `index.html` carries `no-cache`
+- CSP, `X-Frame-Options: DENY`, `nosniff` and referrer policy all present
+- React mounts and the sign-in screen renders, fonts load, no failed requests
+- no horizontal overflow at 400px
+
+### Rollback
+
+    cd /opt/telos
+    cp docker-compose.yml.bak-20261020175725 docker-compose.yml
+    cp Caddyfile.bak-20261020175725 Caddyfile
+    docker compose up -d --no-deps caddy
+    docker compose stop telos-api
