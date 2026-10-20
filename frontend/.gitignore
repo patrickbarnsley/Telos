@@ -1,0 +1,11 @@
+# Installed, not authored. 78 packages and roughly 10k files.
+node_modules/
+
+# Build output. Produced by `npm run build`, never edited, never reviewed.
+dist/
+
+# Local overrides, which is where a real key would end up.
+.env
+.env.*
+!.env.example
+tsconfig.tsbuildinfo
