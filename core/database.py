@@ -75,22 +75,47 @@ def protect_public_schema(cursor) -> None:
     Supabase data API. Hardening at migration time only protects the tables that
     happened to exist that day.
 
-    Enumerated from pg_tables rather than listed, so a table added later is
-    covered without anyone remembering to add it here. Idempotent.
+    Two things make this safe to call from inside someone else's transaction.
+
+    It runs inside a SAVEPOINT. A failed statement in PostgreSQL poisons the
+    whole transaction, so catching the exception is not enough: every statement
+    after it fails with "current transaction is aborted" and the caller gets
+    blamed for a problem that happened here. The first version of this function
+    did exactly that and broke init_db on any non-Supabase database.
+
+    And it revokes only from roles that exist. anon and authenticated are
+    Supabase's, not PostgreSQL's; a plain Postgres has neither, which is how the
+    bug above was found.
 
     Never raises. Failing to harden must not stop the app starting, but it must
     not pass silently either, so it is logged.
     """
+    log = logging.getLogger("telos.db")
     try:
+        cursor.execute("SAVEPOINT telos_harden")
+    except Exception as exc:                       # pragma: no cover
+        log.warning("Could not open a savepoint to harden the schema: %s", exc)
+        return
+
+    try:
+        # Names come from pg_roles filtered against a literal allowlist, never
+        # from anything a caller supplies.
+        cursor.execute(
+            "SELECT rolname FROM pg_roles WHERE rolname IN ('anon', 'authenticated')")
+        roles = ", ".join(f'"{r[0]}"' for r in cursor.fetchall())
+
         cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
         for (name,) in cursor.fetchall():
-            cursor.execute(
-                f'ALTER TABLE public."{name}" ENABLE ROW LEVEL SECURITY')
-            cursor.execute(
-                f'REVOKE ALL ON public."{name}" FROM anon, authenticated')
-    except Exception as exc:                       # pragma: no cover
-        logging.getLogger("telos.db").warning(
-            "Could not harden the public schema: %s", exc)
+            cursor.execute(f'ALTER TABLE public."{name}" ENABLE ROW LEVEL SECURITY')
+            if roles:
+                cursor.execute(f'REVOKE ALL ON public."{name}" FROM {roles}')
+        cursor.execute("RELEASE SAVEPOINT telos_harden")
+    except Exception as exc:
+        log.warning("Could not harden the public schema: %s", exc)
+        try:
+            cursor.execute("ROLLBACK TO SAVEPOINT telos_harden")
+        except Exception:                          # pragma: no cover
+            log.warning("And could not roll back to the savepoint either.")
 
 
 def init_db():

@@ -124,4 +124,27 @@ check("waitlist dedupes on email", n == 1, f"{n}")
 print()
 print("=" * 46)
 print(f"{'ALL TESTS PASSED' if not FAIL else 'FAILURES: ' + ', '.join(FAIL)}")
+
+print("\n[schema hardening] it must not poison the caller's transaction")
+# protect_public_schema revokes from anon and authenticated, which exist on
+# Supabase and on no plain PostgreSQL. The first version let that failure abort
+# the surrounding transaction, so every statement after it died with "current
+# transaction is aborted" and init_db stopped halfway. It ran inside a
+# try/except and still took the caller down with it, because catching the
+# Python exception does nothing about the poisoned transaction.
+_c = db.get_connection(); _cur = _c.cursor()
+_cur.execute("CREATE TABLE IF NOT EXISTS harden_probe (id INT)")
+db.protect_public_schema(_cur)
+try:
+    _cur.execute("SELECT 1")
+    _ok = _cur.fetchone()[0] == 1
+except Exception as _e:
+    _ok = False
+check("the transaction still works afterwards", _ok)
+
+_cur.execute("SELECT rowsecurity FROM pg_tables WHERE schemaname='public' AND tablename='harden_probe'")
+check("and it did enable RLS on a new table", _cur.fetchone()[0] is True)
+_cur.execute("DROP TABLE harden_probe")
+_c.commit(); _cur.close(); _c.close()
+
 sys.exit(1 if FAIL else 0)
