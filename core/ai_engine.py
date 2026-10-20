@@ -494,9 +494,11 @@ def flag_injection_in_verdict(result: dict, company_name: str, job_description: 
     if not attempts:
         return result
 
+    # list(...) not the caller's list: callers pass dict(verdict), a shallow
+    # copy whose nested lists are still shared. Mutating in place leaked a
+    # hostile posting's red flag onto the next, clean posting checked.
     flags = result.get("red_flags")
-    if not isinstance(flags, list):
-        flags = []
+    flags = list(flags) if isinstance(flags, list) else []
     flags.insert(0, (
         "This posting contains text aimed at automated screening rather than at "
         "a person: it " + "; it ".join(attempts) + ". Legitimate employers do not "

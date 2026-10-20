@@ -22,6 +22,7 @@ PRICES = {
     "claude-opus-4-5":   {"in": 5.00,  "out": 25.00},
     "claude-opus-4-6":   {"in": 5.00,  "out": 25.00},
     "claude-opus-4-1":   {"in": 15.00, "out": 75.00},
+    "claude-sonnet-5": {"in": 2.00, "out": 10.00},
     "claude-sonnet-4-5": {"in": 3.00,  "out": 15.00},
     "claude-sonnet-4-6": {"in": 3.00,  "out": 15.00},
     "claude-haiku-4-5":  {"in": 1.00,  "out": 5.00},

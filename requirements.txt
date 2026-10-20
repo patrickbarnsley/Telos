@@ -28,3 +28,11 @@ pandas==3.0.3
 
 # --- Configuration ---
 python-dotenv==1.2.2
+
+# Stage 1 of the React migration: the API that replaces Streamlit's
+# role as the backend. Streamlit stays until the cutover.
+fastapi==0.141.1
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+email-validator==2.2.0
+stripe==15.6.1

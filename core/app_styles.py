@@ -29,8 +29,8 @@ INK = "#FFFFFF"          # 18.6 on ground
 MUTED = "#A0A7B8"        # 7.8 on ground, 7.0 on surface, 5.3 on raised
 GOLD = "#C9A84C"         # 8.3 on ground, 5.6 on raised
 GOLD_LIGHT = "#E0BC5E"
-GOOD = "#5FBE90"         # new: 7.4 on surface, 5.6 on raised
-BAD = "#F09189"          # new: 7.3 on surface, 5.5 on raised
+GOOD = "#90DFC0"         # 10.8 on surface, 8.2 on raised; 1.58 vs BAD
+BAD = "#F58584"          # 6.9 on surface, 5.2 on raised; luminance-separated from GOOD
 
 # Numbers are data and should read as data. A proportional face gives 1 a
 # narrower advance than 8, so a column of scores does not line up and 58 and 88
@@ -152,8 +152,8 @@ def apply_theme(active: str = ""):
       background:rgba(15,17,23,.55); }}
     .chip-neutral {{ color:{MUTED}; border-color:rgba(160,167,184,.34); }}
     .chip-live {{ color:{GOLD}; border-color:rgba(201,168,76,.38); }}
-    .chip-good {{ color:{GOOD}; border-color:rgba(95,190,144,.40); }}
-    .chip-bad {{ color:{BAD}; border-color:rgba(240,145,137,.40); }}
+    .chip-good {{ color:{GOOD}; border-color:rgba(144,223,192,.40); }}
+    .chip-bad {{ color:{BAD}; border-color:rgba(245,133,132,.40); }}
 
     /* ---------- pipeline rows ---------- */
     .prow {{ display:grid; grid-template-columns: minmax(0,2.4fr) 1fr 1.25fr 0.9fr;
@@ -210,7 +210,13 @@ def nav_rail(active: str = ""):
                 st.markdown(f'<div class="rail-here">{icon}&nbsp; {label}</div>',
                             unsafe_allow_html=True)
             else:
-                st.page_link(path, label=label, icon=None if icon == "◎" else icon)
+                try:
+                    st.page_link(path, label=label, icon=None if icon == "◎" else icon)
+                except KeyError:
+                    # AppTest runs a page standalone, so sibling pages are not
+                    # registered and page_link cannot resolve a url_pathname.
+                    st.markdown(f'<div class="rail-link">{icon}&nbsp; {label}</div>',
+                                unsafe_allow_html=True)
 
         try:
             from core.plans import is_owner

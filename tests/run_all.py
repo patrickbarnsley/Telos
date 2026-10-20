@@ -30,6 +30,8 @@ SUITES = [
     ("prep", "test_interview_prep.py", "Interview prep quotas, ownership, honesty constraint"),
     ("chrome", "test_ui_chrome.py", "Navigation, headers, status chips, colour contrast"),
     ("safety", "test_prompt_safety.py", "Prompt injection, output validation, advisor scope"),
+    ("payments", "test_payments.py", "Stripe webhooks, founding-seat cap, downgrades"),
+    ("api", "test_api.py", "HTTP boundary: auth, isolation, quotas, throttling"),
 ]
 
 DEFAULTS = {
@@ -63,7 +65,7 @@ def main() -> int:
                                 text=True, env=env, cwd=str(ROOT))
         out = result.stdout + result.stderr
         passes = sum(1 for line in out.splitlines() if line.strip().startswith("PASS"))
-        fails = sum(1 for line in out.splitlines() if line.strip().startswith("FAIL"))
+        fails = sum(1 for line in out.splitlines() if line.strip().startswith("FAIL "))   # not the "FAILURES:" summary line
         total_pass += passes
         total_fail += fails
 
