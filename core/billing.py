@@ -94,6 +94,63 @@ def price_for_new_subscriber(annual: bool = False) -> str:
     return PRICE_MONTHLY
 
 
+def offered_prices() -> list[dict]:
+    """What a new subscriber would actually be charged, asked of Stripe.
+
+    The amounts are never written down here and never sent from the browser.
+    The screen that quotes a price and the checkout that charges it now read the
+    same Stripe Price object, so they cannot drift apart. They had drifted:
+    Upgrade.tsx carried 12, 19 and 190 in its markup while this module resolved
+    whatever the environment pointed at.
+
+    Not cached. A stale amount is exactly the bug this function exists to close,
+    and the billing screen is not hot enough to be worth the risk.
+
+    Returns an empty list when Stripe is not configured, which is also how
+    "Telos does not charge yet" is expressed: no price ids, no paywall, no code
+    change.
+    """
+    key = os.getenv("STRIPE_SECRET_KEY", "")
+    wanted = [("founding", PRICE_FOUNDING), ("monthly", PRICE_MONTHLY),
+              ("annual", PRICE_ANNUAL)]
+    wanted = [(k, pid) for k, pid in wanted if pid]
+    if not key or not wanted:
+        return []
+
+    import stripe
+    stripe.api_key = key
+
+    seats_left = 0
+    if PRICE_FOUNDING:
+        seats_left = max(0, FOUNDING_SEATS - founding_seats_taken())
+
+    # While founding seats remain, price_for_new_subscriber returns the founding
+    # price, so the standard monthly one is not actually purchasable. Offering
+    # both would quote a price the checkout refuses to use.
+    if PRICE_FOUNDING and seats_left > 0:
+        wanted = [(k, pid) for k, pid in wanted if k != "monthly"]
+
+    out = []
+    for kind, price_id in wanted:
+        # One unreachable price must not blank the whole screen, so each is
+        # fetched on its own and a failure drops just that option.
+        try:
+            price = stripe.Price.retrieve(price_id)
+        except Exception:
+            continue
+        recurring = price.get("recurring") or {}
+        if kind == "founding" and seats_left <= 0:
+            continue
+        out.append({
+            "kind": kind,
+            "amount_cents": price.get("unit_amount"),
+            "currency": (price.get("currency") or "usd").upper(),
+            "interval": recurring.get("interval"),
+            "interval_count": recurring.get("interval_count") or 1,
+        })
+    return out
+
+
 def get_billing(tester_name: str) -> dict | None:
     conn = _conn(); cur = conn.cursor()
     init_billing_tables(cur)

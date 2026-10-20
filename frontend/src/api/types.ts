@@ -96,6 +96,16 @@ export interface CareerPath {
   goals?: string | null
 }
 
+/** One purchasable price, as Stripe reports it. No amount is ever written in
+ *  the client; it is quoted from the Price object the checkout charges. */
+export interface OfferedPrice {
+  kind: 'founding' | 'monthly' | 'annual'
+  amount_cents: number | null
+  currency: string
+  interval: string | null
+  interval_count: number
+}
+
 export interface BillingState {
   plan: string
   plan_label: string
@@ -103,4 +113,6 @@ export interface BillingState {
   current_period_end?: string | null
   founding_seats_left: number
   has_subscription: boolean
+  /** Empty when Telos is not charging. The client then shows no paywall. */
+  prices: OfferedPrice[]
 }

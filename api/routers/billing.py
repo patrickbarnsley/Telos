@@ -35,7 +35,8 @@ class CheckoutIn(BaseModel):
 @router.get("/billing")
 def billing_state(account: str = Depends(current_account)):
     """What the user is on, and whether a founding seat is still available."""
-    from core.billing import FOUNDING_SEATS, founding_seats_taken, get_billing
+    from core.billing import (FOUNDING_SEATS, founding_seats_taken, get_billing,
+                              offered_prices)
     from core.plans import get_plan, plan_label
     row = get_billing(account) or {}
     taken = founding_seats_taken()
@@ -46,6 +47,10 @@ def billing_state(account: str = Depends(current_account)):
         "current_period_end": row.get("current_period_end"),
         "founding_seats_left": max(0, FOUNDING_SEATS - taken),
         "has_subscription": bool(row.get("stripe_subscription_id")),
+        # Quoted from Stripe, so the screen cannot promise a price the checkout
+        # does not charge. Empty means Telos is not charging, and the client
+        # renders no paywall rather than inventing one.
+        "prices": offered_prices(),
     }
 
 

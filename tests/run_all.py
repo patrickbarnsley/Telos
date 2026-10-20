@@ -32,6 +32,7 @@ SUITES = [
     ("safety", "test_prompt_safety.py", "Prompt injection, output validation, advisor scope"),
     ("payments", "test_payments.py", "Stripe webhooks, founding-seat cap, downgrades"),
     ("api", "test_api.py", "HTTP boundary: auth, isolation, quotas, throttling"),
+    ("prices", "test_prices.py", "What the upgrade screen is allowed to quote"),
 ]
 
 DEFAULTS = {
