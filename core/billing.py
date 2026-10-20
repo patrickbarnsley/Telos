@@ -45,6 +45,11 @@ def init_billing_tables(cursor) -> None:
         )
     """)
 
+    # Called from five places, not only init_db, so a billing table can appear
+    # long after the schema was last hardened. It protects itself on creation
+    # rather than relying on whoever happened to call it.
+    from core.database import protect_public_schema
+    protect_public_schema(cursor)
 
 def _conn():
     from core.database import get_connection

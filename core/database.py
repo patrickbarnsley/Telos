@@ -1,3 +1,4 @@
+import logging
 import psycopg2
 import psycopg2.extras
 import json
@@ -62,6 +63,35 @@ def get_db_url():
 
 def get_connection():
     return psycopg2.connect(get_db_url(), connect_timeout=10)
+
+def protect_public_schema(cursor) -> None:
+    """Enable RLS and drop the anon/authenticated grants on every public table.
+
+    Telos keys on tester_name and connects as the table owner, which bypasses
+    RLS, so the correct policy set is the empty one and this costs the app
+    nothing. It exists because four tables are created lazily the first time
+    their feature runs -- interview_preps, billing, stripe_events, auth_attempts
+    -- and a table created after the migration would arrive wide open to the
+    Supabase data API. Hardening at migration time only protects the tables that
+    happened to exist that day.
+
+    Enumerated from pg_tables rather than listed, so a table added later is
+    covered without anyone remembering to add it here. Idempotent.
+
+    Never raises. Failing to harden must not stop the app starting, but it must
+    not pass silently either, so it is logged.
+    """
+    try:
+        cursor.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")
+        for (name,) in cursor.fetchall():
+            cursor.execute(
+                f'ALTER TABLE public."{name}" ENABLE ROW LEVEL SECURITY')
+            cursor.execute(
+                f'REVOKE ALL ON public."{name}" FROM anon, authenticated')
+    except Exception as exc:                       # pragma: no cover
+        logging.getLogger("telos.db").warning(
+            "Could not harden the public schema: %s", exc)
+
 
 def init_db():
     conn = get_connection()
@@ -257,6 +287,9 @@ def init_db():
 
     # Job description now lives on the job (entered in Track, auto-loaded in Match).
     cursor.execute("ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jd_text TEXT")
+
+    # Last, so it covers everything the calls above may have just created.
+    protect_public_schema(cursor)
 
     conn.commit()
     cursor.close()

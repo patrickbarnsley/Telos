@@ -32,6 +32,10 @@ def _table(cursor):
     """)
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_auth_attempts ON auth_attempts (bucket, created_at)")
+    # This table is created on the first sign-in attempt, which may be long
+    # after init_db last ran, so it hardens itself rather than waiting.
+    from core.database import protect_public_schema
+    protect_public_schema(cursor)
 
 
 def record_attempt(bucket: str) -> None:
