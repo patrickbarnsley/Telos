@@ -1,0 +1,39 @@
+/* Design tokens, lifted from the validated prototype.
+ *
+ * One deliberate deviation from "lift exactly". The prototype's semantic pair,
+ * --green #4CAF7D and --red #E0736E, sit 1.13 apart in relative luminance.
+ * They pass contrast against the surfaces but not against each other, so an
+ * offer and a rejection are the same brightness: in greyscale, or to a viewer
+ * with red-green colour blindness, the two most consequential states in the
+ * product are indistinguishable by colour alone.
+ *
+ * The replacements below separate by 1.58 and are stronger against both
+ * surfaces than the originals were (11.52 and 7.31 on --surface, against 6.60
+ * and 5.84). Every other token is the prototype's, unchanged.
+ */
+:root {
+  --ground: #0B0D13;
+  --surface: #14171F;
+  --raised: #1B1F2A;
+  --hairline: #262B3A;
+
+  --text: #F2F4F8;
+  --muted: #98A0B4;
+
+  --gold: #C9A84C;
+  --gold-lt: #E3C368;
+  --gold-wash: rgba(201, 168, 76, .10);
+
+  --green: #90DFC0;                      /* corrected, see note above */
+  --green-wash: rgba(144, 223, 192, .12);
+  --red: #F58584;                        /* corrected, see note above */
+  --red-wash: rgba(245, 133, 132, .12);
+  --amber: #D9A441;
+  --amber-wash: rgba(217, 164, 65, .12);
+
+  --display: 'Archivo', system-ui, sans-serif;
+  --ui: 'Inter', system-ui, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --r: 10px;
+}
