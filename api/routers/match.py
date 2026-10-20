@@ -1,5 +1,6 @@
 """The Match pillar, plus interview prep. Every AI call is quota-gated first."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (APIRouter, Depends, File, HTTPException, UploadFile,
+                     status)
 from pydantic import BaseModel
 
 from api.deps import current_account, fail, require_quota
@@ -17,6 +18,54 @@ class MatchIn(BaseModel):
 class ScamCheckIn(BaseModel):
     company: str
     jd_text: str
+
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # same cap as the resume upload
+
+
+@router.post("/from-image")
+async def from_image(file: UploadFile = File(...),
+                     account: str = Depends(require_quota("jd_extract"))):
+    """Transcribe a job posting out of a screenshot.
+
+    The text comes back for the user to read before anything is scored against
+    it. Nothing is saved here: an image is the least reliable input Telos takes,
+    and a transcription the user has not looked at has no business becoming a
+    stored job description.
+    """
+    from core.ai_engine import extract_jd_from_image
+    from core.plans import record_usage
+
+    raw = await file.read()
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            "That image is larger than 5 MB.")
+    if not raw:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "That file is empty.")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "That is not an image. Upload a screenshot of the posting, or paste "
+            "the text instead.")
+
+    class _Uploaded:
+        """extract_jd_from_image expects a file-like with .read()."""
+        def __init__(self, data): self._data = data
+        def read(self): return self._data
+
+    try:
+        text = extract_jd_from_image(_Uploaded(raw))
+    except Exception as exc:
+        raise fail(exc, "reading that screenshot")
+
+    if not (text or "").strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "No readable job text in that image. A sharper screenshot of the "
+            "posting usually fixes it, or paste the text instead.")
+
+    record_usage(account, "jd_extract")
+    return {"jd_text": text}
 
 
 @router.get("")

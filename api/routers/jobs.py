@@ -39,6 +39,16 @@ class JobPatch(BaseModel):
     career_path_id: int | None = None
 
 
+@router.get("/stats")
+def stats(account: str = Depends(current_account)):
+    """Per-company totals, declared before /{job_id} so "stats" is not read as an id."""
+    from core.database import get_company_stats
+    try:
+        return {"companies": get_company_stats(account)}
+    except Exception as exc:
+        raise fail(exc, "working out your pipeline stats")
+
+
 @router.get("")
 def list_jobs(account: str = Depends(current_account)):
     from core.database import get_jobs
