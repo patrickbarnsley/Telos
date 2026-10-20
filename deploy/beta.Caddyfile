@@ -1,0 +1,42 @@
+# Stage 3: the React beta, alongside the Streamlit app.
+#
+# This is an ADDITIONAL block. Do not edit the existing app.usetelosapp.com
+# block, the running container, or the app stack's UserData. Streamlit keeps
+# serving production untouched for the whole migration, and both hit the same
+# database, so a user can move between them without losing state.
+#
+# Append this to the Caddyfile, then reload with:
+#   docker compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+# A reload is not a restart: existing connections are not dropped.
+
+beta.usetelosapp.com {
+    encode zstd gzip
+
+    # The API first, so it wins over the SPA fallback below.
+    handle /api/* {
+        reverse_proxy telos-api:8000
+    }
+
+    handle {
+        root * /srv/beta
+        # React Router owns the routes. Any path that is not a real file has to
+        # return index.html, or a refresh on /account is a 404 from Caddy.
+        try_files {path} /index.html
+        file_server
+    }
+
+    # The build is content-hashed, so assets can be cached hard while index.html
+    # must never be, or a deploy leaves browsers on the previous bundle.
+    @assets path /assets/*
+    header @assets Cache-Control "public, max-age=31536000, immutable"
+    @html path / /index.html
+    header @html Cache-Control "no-cache"
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        Referrer-Policy strict-origin-when-cross-origin
+        # The API is same-origin, so nothing external needs to be reachable.
+        Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'"
+    }
+}
