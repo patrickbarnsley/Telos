@@ -228,6 +228,11 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_spend_month ON ai_spend (created_at)")
 
+    # Stripe linkage. Kept in core/billing.py so the schema lives next to the
+    # logic that owns it.
+    from core.billing import init_billing_tables
+    init_billing_tables(cursor)
+
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS waitlist (
             id SERIAL PRIMARY KEY,
@@ -407,13 +412,19 @@ def save_match_result(score, summary, matched, missing, certs, actions, jd_text,
     cursor.execute("""
         INSERT INTO match_results (tester_name, job_id, company, role, scored_at, overall_score, match_summary, matched_reqs, missing_reqs, recommended_certs, recommended_actions, jd_text, resume_version_id, resume_version_label, resume_snapshot)
         VALUES (%s, %s, %s, %s, CURRENT_DATE::text, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        RETURNING id
     """, (tester_name, job_id, company, role, score, summary,
           json.dumps(matched), json.dumps(missing),
           json.dumps(certs), json.dumps(actions), jd_text,
           resume_version_id, resume_version_label, resume_snapshot))
+    # Returned so a caller can act on the row it just created. Without this the
+    # API answered {"id": null} and nothing could chain off a fresh score.
+    row = cursor.fetchone()
+    new_id = row[0] if row else None
     conn.commit()
     cursor.close()
     conn.close()
+    return new_id
 
 def get_all_match_results(tester_name: str) -> list:
     conn = get_connection()
@@ -856,6 +867,12 @@ USER_TABLES = [
     "usage_events", "user_sessions",
 ]
 
+# Deliberately NOT in USER_TABLES. A subscription is a financial record, the
+# same call already made for ai_spend: it has to survive deletion for tax and
+# chargeback reasons, so it is anonymised instead. What is removed is the link
+# between the row and a person; what stays is that money moved.
+FINANCIAL_TABLES = ["ai_spend", "billing"]
+
 
 def purge_user_data(tester_name: str) -> dict:
     """Delete every row belonging to this account. Returns rows removed per table."""
@@ -878,6 +895,19 @@ def purge_user_data(tester_name: str) -> dict:
             (tester_name,),
         )
         removed["ai_spend_anonymized"] = cursor.rowcount
+
+        # Same call for the Stripe linkage, and for the same reason. The
+        # customer and subscription ids go too: they are pointers back to a
+        # named person in Stripe, so leaving them would defeat the anonymising.
+        cursor.execute(
+            """UPDATE billing
+                  SET tester_name = %s,
+                      stripe_customer_id = NULL,
+                      stripe_subscription_id = NULL
+                WHERE tester_name = %s""",
+            (f"deleted:{abs(hash(tester_name))}", tester_name),
+        )
+        removed["billing_anonymized"] = cursor.rowcount
         conn.commit()
     except Exception:
         conn.rollback()
