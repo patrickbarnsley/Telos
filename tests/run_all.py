@@ -33,6 +33,7 @@ SUITES = [
     ("payments", "test_payments.py", "Stripe webhooks, founding-seat cap, downgrades"),
     ("api", "test_api.py", "HTTP boundary: auth, isolation, quotas, throttling"),
     ("prices", "test_prices.py", "What the upgrade screen is allowed to quote"),
+    ("billing-attr", "test_attribution.py", "AI spend is billed to the right account"),
 ]
 
 DEFAULTS = {

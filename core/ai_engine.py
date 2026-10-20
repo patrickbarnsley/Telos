@@ -2,6 +2,7 @@ import pdfplumber
 import docx
 import io
 import base64
+from contextvars import ContextVar
 import anthropic
 import json
 import os
@@ -86,8 +87,29 @@ def _invoke(client, action: str = "", tester_name: str = "", **kwargs):
     return message
 
 
+# Set per request by the API layer. Streamlit never touches it and keeps using
+# session state, so the two front ends attribute spend the same way without
+# either knowing about the other.
+_request_user: ContextVar[str] = ContextVar("telos_request_user", default="")
+
+
+def set_request_user(name: str) -> None:
+    """Name the account every AI call in this request should be billed to.
+
+    Must be called from an async context. A ContextVar set inside a *sync*
+    FastAPI dependency is written to a threadpool copy of the context and is
+    invisible to the handler; only an async dependency propagates. Verified by
+    experiment rather than assumed, because the failure is silent: spend would
+    simply keep landing under an empty name.
+    """
+    _request_user.set(name or "")
+
+
 def _current_user() -> str:
     """Best-effort attribution for the ledger. Never raises outside Streamlit."""
+    who = _request_user.get()
+    if who:
+        return who
     try:
         import streamlit as st
         return st.session_state.get("tester_name", "") or ""

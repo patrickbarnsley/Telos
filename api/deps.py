@@ -7,20 +7,40 @@ found before launch were all the same mistake in different shapes: trusting the
 caller to say who they were.
 """
 from fastapi import Cookie, Depends, HTTPException, status
+from starlette.concurrency import run_in_threadpool
 
 SESSION_COOKIE = "telos_session"
 
 
-def current_account(telos_session: str | None = Cookie(default=None)) -> str:
-    """The signed-in account, or 401. The only source of identity in the API."""
+def _resolve(token: str | None) -> str:
     from core.auth import resume_session
 
-    if not telos_session:
+    if not token:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in.")
-    email = resume_session(telos_session)
+    email = resume_session(token)
     if not email:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED,
                             "That session has expired. Sign in again.")
+    return email
+
+
+async def current_account(telos_session: str | None = Cookie(default=None)) -> str:
+    """The signed-in account, or 401. The only source of identity in the API.
+
+    Async on purpose. It also names the account for AI spend attribution, and a
+    ContextVar set in a sync dependency never reaches the handler: FastAPI runs
+    sync dependencies in a worker thread that gets a copy of the context, and
+    the write dies with the copy. Every AI call made through this API was being
+    recorded against an empty tester_name because _current_user reads Streamlit
+    session state, which does not exist here.
+
+    The session lookup is a blocking database call, so it stays on the
+    threadpool rather than stalling the event loop.
+    """
+    from core.ai_engine import set_request_user
+
+    email = await run_in_threadpool(_resolve, telos_session)
+    set_request_user(email)
     return email
 
 
